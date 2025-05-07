@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const authMiddleware = require('../middleware/auth');
-const { getBetHistory, getBetStats } = require('../controllers/betController');
+const transactionController = require('../controllers/transactionController');
+const authMiddleware = require('../middleware/authMiddleware');
 
-router.get('/history', authMiddleware, getBetHistory);
-router.get('/stats', authMiddleware, getBetStats);
+router.post('/crypto-deposit', authMiddleware, transactionController.initiateCryptoDeposit);
+router.post('/crypto-withdrawal', authMiddleware, transactionController.initiateCryptoWithdrawal);
+router.post('/webhook', transactionController.handleWebhook);
 
 module.exports = router;
