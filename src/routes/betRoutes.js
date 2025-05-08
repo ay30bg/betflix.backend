@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getBetHistory, getBetStats, placeBet, getCurrentRound, getBetResult } = require('../controllers/betController');
-const authMiddleware = require('../middleware/authMiddleware');
+const authMiddleware = require('../middleware/auth');
 
 router.get('/history', authMiddleware, getBetHistory);
 router.get('/stats', authMiddleware, getBetStats);
