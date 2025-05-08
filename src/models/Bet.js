@@ -1,9 +1,8 @@
-// src/models/Bet.js
 const mongoose = require('mongoose');
 
 const betSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  period: { type: String, required: true }, // e.g., first 8 chars of clientSeed
+  period: { type: String, required: true }, // References Round.period (e.g., round-1697059200000)
   type: { type: String, required: true }, // 'color' or 'number'
   value: { type: String, required: true }, // Bet value (e.g., 'Green' or number)
   amount: { type: Number, required: true }, // Bet amount
