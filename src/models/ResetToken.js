@@ -1,0 +1,27 @@
+const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
+
+const resetTokenSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+    ref: 'User',
+  },
+  token: {
+    type: String,
+    required: true,
+  },
+  expires: {
+    type: Date,
+    required: true,
+  },
+});
+
+resetTokenSchema.pre('save', async function (next) {
+  if (this.isModified('token')) {
+    this.token = await bcrypt.hash(this.token, 10);
+  }
+  next();
+});
+
+module.exports = mongoose.model('ResetToken', resetTokenSchema);
