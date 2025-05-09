@@ -196,6 +196,8 @@ const sendEmail = require('../utils/sendEmail');
 const signup = async (req, res) => {
   const { username, email, password, referralCode } = req.body;
 
+  console.log('Signup attempt:', { username, email, password: '****' });
+
   if (!username || !email || !password) {
     return res.status(400).json({ error: 'Username, email, and password are required' });
   }
@@ -203,16 +205,20 @@ const signup = async (req, res) => {
   try {
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
+      console.log('User already exists:', { email, username });
       return res.status(400).json({ error: 'Username or email already taken' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    console.log('Hashed password:', hashedPassword);
+
     const user = await User.create({
       username,
       email,
       password: hashedPassword,
       balance: 0,
     });
+    console.log('User created:', { id: user._id, email: user.email });
 
     if (referralCode) {
       const referral = await Referral.findOne({ code: referralCode });
@@ -250,21 +256,26 @@ const signup = async (req, res) => {
 const login = async (req, res) => {
   const { email, password } = req.body;
 
+  console.log('Login attempt:', { email, password: '****' });
+
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
   try {
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+    console.log('Normalized email:', normalizedEmail);
 
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
-      console.log('User not found for email:', email);
+      console.log('User not found for email:', normalizedEmail);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    console.log('Stored password hash:', user.password);
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      console.log('Password mismatch for user:', email);
+      console.log('Password mismatch for user:', normalizedEmail);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
@@ -362,6 +373,7 @@ const resetPassword = async (req, res) => {
     }
 
     // Update the password (pre('save') hook will hash it)
+    console.log('Updating password for user:', email, 'New password:', '****');
     user.password = password;
     await user.save();
     console.log('Password updated for user:', email);
