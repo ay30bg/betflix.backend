@@ -209,16 +209,14 @@ const signup = async (req, res) => {
       return res.status(400).json({ error: 'Username or email already taken' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    console.log('Hashed password:', hashedPassword);
-
+    // Let the User model's pre('save') hook hash the password
     const user = await User.create({
       username,
       email,
-      password: hashedPassword,
+      password, // Plain password, hashed by pre('save')
       balance: 0,
     });
-    console.log('User created:', { id: user._id, email: user.email });
+    console.log('User created:', { id: user._id, email: user.email, passwordHash: user.password });
 
     if (referralCode) {
       const referral = await Referral.findOne({ code: referralCode });
@@ -352,7 +350,6 @@ const resetPassword = async (req, res) => {
   }
 
   try {
-    // Verify the JWT token
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -360,25 +357,21 @@ const resetPassword = async (req, res) => {
       return res.status(400).json({ error: 'Invalid or expired token' });
     }
 
-    // Find the user
     const user = await User.findOne({ _id: decoded.userId, email });
     if (!user) {
       return res.status(400).json({ error: 'Invalid user' });
     }
 
-    // Find the reset token
     const resetToken = await ResetToken.findOne({ userId: user._id, token });
     if (!resetToken || resetToken.expires < Date.now()) {
       return res.status(400).json({ error: 'Token expired or invalid' });
     }
 
-    // Update the password (pre('save') hook will hash it)
     console.log('Updating password for user:', email, 'New password:', '****');
     user.password = password;
     await user.save();
     console.log('Password updated for user:', email);
 
-    // Delete the used reset token
     await ResetToken.deleteOne({ _id: resetToken._id });
 
     res.status(200).json({ message: 'Password reset successful' });
