@@ -24,7 +24,7 @@ const signup = async (req, res) => {
       username,
       email,
       password: hashedPassword,
-      // balance: 1000,
+      balance: 0,
     });
 
     if (referralCode) {
