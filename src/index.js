@@ -9,13 +9,14 @@ const userRoutes = require('./routes/userRoutes');
 const betRoutes = require('./routes/betRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const referralRoutes = require('./routes/referralRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 require('dotenv').config();
 
 const app = express();
 
 // Middleware
 app.use(cors({
-  origin: ['https://betflix-one.vercel.app', 'http://localhost:3000'],
+  origin: ['https://betflix-one.vercel.app', 'http://localhost:3000', 'https://admin-betflix.vercel.app'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -60,6 +61,8 @@ app.use('/api/user', userRoutes);
 app.use('/api/bets', betRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/referral', referralRoutes);
+app.use('/api/admin', adminRoutes);
+
 
 // Error handling
 app.use((err, req, res, next) => {
