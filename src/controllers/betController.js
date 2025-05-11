@@ -535,7 +535,7 @@ exports.getCurrentRound = [
       console.error('Error in getCurrentRound:', err.message, err.stack);
       res.status(500).json({ error: 'Server error', details: err.message });
     }
-  },
+  ],
 ];
 
 // Pre-generate a round
@@ -650,7 +650,7 @@ exports.setRoundOutcome = async (req, res) => {
       }
 
       bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
-      bet.won = won l;
+      bet.won = won; // Fixed: Removed stray 'l'
       bet.payout = payout;
       await bet.save();
       console.log('Bet updated:', { betId: bet._id, won, payout });
