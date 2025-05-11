@@ -13,12 +13,22 @@
 
 const express = require('express');
 const router = express.Router();
-const { getBetHistory, getBetStats, placeBet, getCurrentRound, getBetResult, preGenerateRound, cleanupInvalidBets, setRoundOutcome } = require('../controllers/betController');
+const {
+  getBetHistory,
+  getBetStats,
+  placeBet,
+  getCurrentRound,
+  getBetResult,
+  preGenerateRound,
+  cleanupInvalidBets,
+  setRoundOutcome,
+} = require('../controllers/betController');
 const authMiddleware = require('../middleware/auth');
 const adminAuthMiddleware = require('../middleware/adminAuth');
 const { body, param, validationResult } = require('express-validator');
 
-router.get('/history', authMiddleware, getBetHistory);
+// User bet routes
+router.get('/history', authMiddleware, getBetHistory); // Line 21
 router.get('/stats', authMiddleware, getBetStats);
 router.post('/', authMiddleware, placeBet);
 router.get('/current', authMiddleware, getCurrentRound);
@@ -26,6 +36,7 @@ router.get('/result/:period', authMiddleware, getBetResult);
 router.post('/pre-generate-round', authMiddleware, preGenerateRound);
 router.delete('/cleanup', authMiddleware, cleanupInvalidBets);
 
+// Admin route for setting round outcome
 router.post(
   '/:period/set-outcome',
   adminAuthMiddleware,
