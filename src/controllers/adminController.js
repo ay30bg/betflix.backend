@@ -96,11 +96,20 @@ const editUser = async (req, res) => {
     // Update fields if provided
     if (username) user.username = username;
     if (email) user.email = email;
-    if (typeof balance === 'number') user.balance = balance;
+    if (typeof balance === 'number') user.balance = parseFloat(balance.toFixed(2)); // Ensure 2 decimal places
 
     await user.save();
     console.log(`Admin ${req.admin.id} edited user ${userId}`);
-    res.json({ message: 'User updated successfully', user: { id: user._id, username: user.username, email: user.email, balance: user.balance } });
+    res.json({
+      message: 'User updated successfully',
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        balance: user.balance,
+        status: user.status,
+      },
+    });
   } catch (err) {
     console.error('Error editing user:', err);
     res.status(500).json({ error: 'Server error' });
@@ -125,7 +134,16 @@ const toggleBanUser = async (req, res) => {
     user.status = status;
     await user.save();
     console.log(`Admin ${req.admin.id} set user ${userId} status to ${status}`);
-    res.json({ message: `User ${status} successfully`, user: { id: user._id, username: user.username, email: user.email, balance: user.balance, status: user.status } });
+    res.json({
+      message: `User ${status} successfully`,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        balance: user.balance,
+        status: user.status,
+      },
+    });
   } catch (err) {
     console.error('Error updating user status:', err);
     res.status(500).json({ error: 'Server error' });
