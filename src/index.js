@@ -110,13 +110,13 @@ app.use(cors({
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Explicitly include OPTIONS
+  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Explicitly include OPTIONS
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true, // Allow cookies if using HttpOnly cookies
 }));
 
-// Handle preflight requests explicitly
-app.options('*', cors()); // Respond to all OPTIONS requests
+// // Handle preflight requests explicitly
+// app.options('*', cors()); // Respond to all OPTIONS requests
 
 // Middleware
 app.use(helmet());
