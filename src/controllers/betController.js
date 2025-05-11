@@ -151,7 +151,7 @@
 
 //     if (bet.type === 'color') {
 //       won = bet.value === resultColor;
-//       payout = won ? bet.amount * 2 : -bet.amount;
+//       payout = won ? bet.amount * 2 : 0; // Fixed: 0 for loss instead of -bet.amount
 //     } else if (bet.type === 'number') {
 //       if (bet.value == resultNumber) {
 //         won = true;
@@ -160,7 +160,7 @@
 //         won = true;
 //         payout = bet.amount * 2;
 //       } else {
-//         payout = -bet.amount;
+//         payout = 0; // Fixed: 0 for loss instead of -bet.amount
 //       }
 //     }
 
@@ -334,11 +334,12 @@ exports.getBetResult = async (req, res) => {
       return res.json({ bet });
     }
 
-    // Find or create the round
+    // Find or create the round with a consistent serverSeed
     let round = await Round.findOne({ period });
     if (!round) {
-      const serverSeed = crypto.randomBytes(32).toString('hex');
-      const combined = `${bet.clientSeed}-${serverSeed}-${period}`;
+      // Generate deterministic serverSeed based on period
+      const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
+      const combined = `${serverSeed}-${period}`;
       const hash = crypto.createHash('sha256').update(combined).digest('hex');
       const resultNumber = parseInt(hash.slice(0, 8), 16) % 10;
       const resultColor = resultNumber % 2 === 0 ? 'Green' : 'Red';
@@ -352,8 +353,15 @@ exports.getBetResult = async (req, res) => {
         serverSeed,
       });
       console.log('Creating round:', round);
-      await round.save();
-      console.log('Round saved:', await Round.findOne({ period }));
+
+      // Use findOneAndUpdate to prevent race conditions
+      const existingRound = await Round.findOneAndUpdate(
+        { period },
+        { $setOnInsert: round },
+        { upsert: true, new: true }
+      );
+      round = existingRound;
+      console.log('Round saved:', round);
     }
 
     const { resultNumber, resultColor } = round;
@@ -363,7 +371,7 @@ exports.getBetResult = async (req, res) => {
 
     if (bet.type === 'color') {
       won = bet.value === resultColor;
-      payout = won ? bet.amount * 2 : 0; // Fixed: 0 for loss instead of -bet.amount
+      payout = won ? bet.amount * 2 : 0;
     } else if (bet.type === 'number') {
       if (bet.value == resultNumber) {
         won = true;
@@ -372,9 +380,11 @@ exports.getBetResult = async (req, res) => {
         won = true;
         payout = bet.amount * 2;
       } else {
-        payout = 0; // Fixed: 0 for loss instead of -bet.amount
+        payout = 0;
       }
     }
+
+    console.log('Bet result calculated:', { won, payout, resultNumber, resultColor });
 
     // Update bet with result
     bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
@@ -382,7 +392,7 @@ exports.getBetResult = async (req, res) => {
     bet.payout = payout;
     await bet.save();
 
-    // Update user balance with payout
+    // Update user balance
     const user = await User.findById(userId);
     const newBalance = Math.max(user.balance + payout, 0);
     await User.findByIdAndUpdate(userId, { balance: newBalance, updatedAt: Date.now() });
@@ -418,6 +428,49 @@ exports.getCurrentRound = async (req, res) => {
     });
   } catch (err) {
     console.error('Error in getCurrentRound:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Function to pre-generate rounds
+exports.preGenerateRound = async (req, res) => {
+  try {
+    const { period } = req.body; // Or pass period directly in a cron job
+    if (!/^round-\d+$/.test(period)) {
+      return res.status(400).json({ error: 'Invalid period format' });
+    }
+
+    const existingRound = await Round.findOne({ period });
+    if (existingRound) {
+      return res.json(existingRound);
+    }
+
+    const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
+    const combined = `${serverSeed}-${period}`;
+    const hash = crypto.createHash('sha256').update(combined).digest('hex');
+    const resultNumber = parseInt(hash.slice(0, 8), 16) % 10;
+    const resultColor = resultNumber % 2 === 0 ? 'Green' : 'Red';
+
+    const round = new Round({
+      period,
+      resultNumber,
+      resultColor,
+      createdAt: new Date(parseInt(period.split('-')[1])),
+      expiresAt: new Date(parseInt(period.split('-')[1]) + 60 * 1000),
+      serverSeed,
+    });
+
+    // Use findOneAndUpdate to prevent race conditions
+    const savedRound = await Round.findOneAndUpdate(
+      { period },
+      { $setOnInsert: round },
+      { upsert: true, new: true }
+    );
+
+    console.log('Pre-generated round:', savedRound);
+    res.json(savedRound);
+  } catch (err) {
+    console.error('Error in preGenerateRound:', err);
     res.status(500).json({ error: 'Server error' });
   }
 };
