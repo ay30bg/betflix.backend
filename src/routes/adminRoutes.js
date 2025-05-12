@@ -82,11 +82,11 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
-const adminAuthMiddleware = require('../middleware/auth');
+const adminAuthMiddleware = require('../middleware/adminAuth');
 
 // Public routes
 router.post('/signup', adminController.signupAdmin);
-router.post('/admin/login', adminController.loginAdmin);
+router.post('/login', adminController.loginAdmin);
 router.post('/forgot-password', adminController.forgotPassword);
 router.post('/reset-password/:token', adminController.resetPassword);
 
