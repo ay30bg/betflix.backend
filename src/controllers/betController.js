@@ -365,16 +365,15 @@ exports.placeBet = async (req, res) => {
       return res.status(400).json({ error: 'Invalid number value' });
     }
 
-    // Updated: Changed round duration to 2 minutes (120 seconds)
-    const roundDuration = 120 * 1000; // 120 seconds
+    const roundDuration = 120 * 1000; // 2 minutes
     const now = Date.now();
     const roundStart = Math.floor(now / roundDuration) * roundDuration;
     const roundEnd = roundStart + roundDuration;
     const period = `round-${roundStart}`;
     console.log('Round details:', { period, roundStart, roundEnd });
 
-    // Keep 5-second buffer before round end to prevent late bets
-    if (now > roundEnd - 5000) {
+    // Updated: Prevent bets in the last 10 seconds of the round
+    if (now > roundEnd - 10000) {
       console.error('Round ending soon:', { now, roundEnd });
       return res.status(400).json({ error: 'Round is about to end, please wait for the next round' });
     }
@@ -446,7 +445,6 @@ exports.getBetResult = async (req, res) => {
         resultNumber,
         resultColor,
         createdAt: new Date(parseInt(period.split('-')[1])),
-        // Updated: Set expiresAt to 2 minutes after round start
         expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
         serverSeed,
       });
@@ -460,7 +458,6 @@ exports.getBetResult = async (req, res) => {
       console.log('Round saved:', { period, resultNumber, resultColor });
     }
 
-    // Updated: Allow 10-second grace period for result fetching
     const gracePeriod = 10000; // 10 seconds
     if (round.expiresAt < new Date() - gracePeriod) {
       console.error('Round expired beyond grace period:', {
@@ -523,8 +520,7 @@ exports.getBetResult = async (req, res) => {
 
 exports.getCurrentRound = async (req, res) => {
   try {
-    // Updated: Changed round duration to 2 minutes (120 seconds)
-    const roundDuration = 120 * 1000; // 120 seconds
+    const roundDuration = 120 * 1000; // 2 minutes
     const now = Date.now();
     const roundStart = Math.floor(now / roundDuration) * roundDuration;
     const period = `round-${roundStart}`;
@@ -574,7 +570,6 @@ exports.preGenerateRound = async (req, res) => {
       resultNumber,
       resultColor,
       createdAt: new Date(parseInt(period.split('-')[1])),
-      // Updated: Set expiresAt to 2 minutes after round start
       expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
       serverSeed,
     });
@@ -610,8 +605,3 @@ exports.cleanupInvalidBets = async (req, res) => {
     res.status(500).json({ error: 'Server error', details: err.message });
   }
 };
-//   } catch (err) {
-//     console.error('Error in cleanupInvalidBets:', err.message, err.stack);
-//     res.status(500).json({ error: 'Server error', details: err.message });
-//   }
-// };
