@@ -15,7 +15,7 @@ const adminAuthMiddleware = require('../middleware/adminAuth');
 const { body, param, validationResult } = require('express-validator');
 
 // User bet routes
-router.get('/history', authMiddleware, getBetHistory); // Line 21
+router.get('/history', authMiddleware, getBetHistory);
 router.get('/stats', authMiddleware, getBetStats);
 router.post('/', authMiddleware, placeBet);
 router.get('/current', authMiddleware, getCurrentRound);
@@ -38,4 +38,8 @@ router.post(
       console.error('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
+    setRoundOutcome(req, res, next);
+  }
+);
 
+module.exports = router;
