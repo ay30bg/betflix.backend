@@ -86,7 +86,7 @@ const adminAuthMiddleware = require('../middleware/auth');
 
 // Public routes
 router.post('/signup', adminController.signupAdmin);
-router.post('/login', adminController.loginAdmin);
+router.post('/admin/login', adminController.loginAdmin);
 router.post('/forgot-password', adminController.forgotPassword);
 router.post('/reset-password/:token', adminController.resetPassword);
 
