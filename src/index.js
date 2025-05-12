@@ -111,7 +111,7 @@ require('dotenv').config();
 const app = express();
 
 // Enable trust proxy to handle X-Forwarded-For header
-app.set('trust proxy', false);
+app.set('trust proxy', 1);
 
 // CORS configuration
 const allowedOrigins = [
