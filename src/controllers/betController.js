@@ -437,7 +437,7 @@ exports.getBetResult = async (req, res) => {
       return res.status(400).json({ error: 'Invalid period format' });
     }
 
-    const bet = await Bet.find Ставка.findOne({ userId, period });
+    const bet = await Bet.findOne({ userId, period }); // Fixed typo: Replaced 'Ставка' with 'Bet'
     if (!bet) {
       console.error('Bet not found:', { userId, period });
       return res.status(404).json({ error: 'Bet not found for this round' });
