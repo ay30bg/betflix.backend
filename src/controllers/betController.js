@@ -2,15 +2,6 @@
 // const User = require('../models/User');
 // const Round = require('../models/Round');
 // const crypto = require('crypto');
-// const rateLimit = require('express-rate-limit');
-
-// // Rate limiter for getCurrentRound
-// const currentRoundLimiter = rateLimit({
-//   windowMs: 60 * 1000, // 1 minute
-//   max: 10, // 10 requests per minute per user
-//   keyGenerator: (req) => req.user?.id || req.ip, // Use user ID if authenticated, else IP
-//   message: 'Too many requests to get current round, please try again later',
-// });
 
 // exports.getBetHistory = async (req, res) => {
 //   try {
@@ -133,7 +124,7 @@
 //       return res.status(400).json({ error: 'Invalid period format' });
 //     }
 
-//     const bet = await Bet.findOne({ userId, period });
+//     const bet = await Bet.findOne({ userId, period }); // Fixed typo: Replaced 'Ставка' with 'Bet'
 //     if (!bet) {
 //       console.error('Bet not found:', { userId, period });
 //       return res.status(404).json({ error: 'Bet not found for this round' });
@@ -219,35 +210,32 @@
 //   }
 // };
 
-// exports.getCurrentRound = [
-//   currentRoundLimiter,
-//   async (req, res) => {
-//     try {
-//       const roundDuration = 60 * 1000;
-//       const now = Date.now();
-//       const roundStart = Math.floor(now / roundDuration) * roundDuration;
-//       const period = `round-${roundStart}`;
-//       const expiresAt = new Date(roundStart + roundDuration).toISOString();
-//       console.log('getCurrentRound:', { now, period, expiresAt });
+// exports.getCurrentRound = async (req, res) => {
+//   try {
+//     const roundDuration = 60 * 1000;
+//     const now = Date.now();
+//     const roundStart = Math.floor(now / roundDuration) * roundDuration;
+//     const period = `round-${roundStart}`;
+//     const expiresAt = new Date(roundStart + roundDuration).toISOString();
+//     console.log('getCurrentRound:', { now, period, expiresAt });
 
-//       const round = await Round.findOne({ period });
+//     const round = await Round.findOne({ period });
 
-//       res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-//       res.set('Pragma', 'no-cache');
-//       res.set('Expires', '0');
-//       res.set('Surrogate-Control', 'no-store');
+//     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+//     res.set('Pragma', 'no-cache');
+//     res.set('Expires', '0');
+//     res.set('Surrogate-Control', 'no-store');
 
-//       res.json({
-//         period,
-//         expiresAt,
-//         result: round ? { resultNumber: round.resultNumber, resultColor: round.resultColor } : null,
-//       });
-//     } catch (err) {
-//       console.error('Error in getCurrentRound:', err.message, err.stack);
-//       res.status(500).json({ error: 'Server error', details: err.message });
-//     }
-//   },
-// ];
+//     res.json({
+//       period,
+//       expiresAt,
+//       result: round ? { resultNumber: round.resultNumber, resultColor: round.resultColor } : null,
+//     });
+//   } catch (err) {
+//     console.error('Error in getCurrentRound:', err.message, err.stack);
+//     res.status(500).json({ error: 'Server error', details: err.message });
+//   }
+// };
 
 // exports.preGenerateRound = async (req, res) => {
 //   try {
@@ -304,12 +292,6 @@
 //     });
 //     console.log('Cleaned up invalid bets:', result);
 //     res.json(result);
-//   } catch (err) {
-//     console.error('Error in cleanupInvalidBets:', err.message, err.stack);
-//     res.status(500).json({ error: 'Server error', details: err.message });
-//   }
-// };
-
 
 const Bet = require('../models/Bet');
 const User = require('../models/User');
@@ -383,13 +365,15 @@ exports.placeBet = async (req, res) => {
       return res.status(400).json({ error: 'Invalid number value' });
     }
 
-    const roundDuration = 60 * 1000;
+    // Updated: Changed round duration to 2 minutes (120 seconds)
+    const roundDuration = 120 * 1000; // 120 seconds
     const now = Date.now();
     const roundStart = Math.floor(now / roundDuration) * roundDuration;
     const roundEnd = roundStart + roundDuration;
     const period = `round-${roundStart}`;
     console.log('Round details:', { period, roundStart, roundEnd });
 
+    // Keep 5-second buffer before round end to prevent late bets
     if (now > roundEnd - 5000) {
       console.error('Round ending soon:', { now, roundEnd });
       return res.status(400).json({ error: 'Round is about to end, please wait for the next round' });
@@ -403,7 +387,7 @@ exports.placeBet = async (req, res) => {
 
     const newBalance = user.balance - amount;
     console.log('Updating balance:', { oldBalance: user.balance, newBalance });
-    await User.findByIdAndUpdate(req.user.id, { balance: newBalance, updatedAt: Date.now() });
+    await User.findByIdAndUpdate(req.user.id, { balance: newBalance, updatedAt: new Date() });
 
     const bet = new Bet({
       userId: req.user.id,
@@ -437,7 +421,7 @@ exports.getBetResult = async (req, res) => {
       return res.status(400).json({ error: 'Invalid period format' });
     }
 
-    const bet = await Bet.findOne({ userId, period }); // Fixed typo: Replaced 'Ставка' with 'Bet'
+    const bet = await Bet.findOne({ userId, period });
     if (!bet) {
       console.error('Bet not found:', { userId, period });
       return res.status(404).json({ error: 'Bet not found for this round' });
@@ -462,7 +446,8 @@ exports.getBetResult = async (req, res) => {
         resultNumber,
         resultColor,
         createdAt: new Date(parseInt(period.split('-')[1])),
-        expiresAt: new Date(parseInt(period.split('-')[1]) + 60 * 1000),
+        // Updated: Set expiresAt to 2 minutes after round start
+        expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
         serverSeed,
       });
 
@@ -475,10 +460,23 @@ exports.getBetResult = async (req, res) => {
       console.log('Round saved:', { period, resultNumber, resultColor });
     }
 
-    if (round.expiresAt < new Date()) {
-      console.error('Round expired:', { period, expiresAt: round.expiresAt });
+    // Updated: Allow 10-second grace period for result fetching
+    const gracePeriod = 10000; // 10 seconds
+    if (round.expiresAt < new Date() - gracePeriod) {
+      console.error('Round expired beyond grace period:', {
+        period,
+        expiresAt: round.expiresAt,
+        currentTime: new Date(),
+        gracePeriod,
+      });
       return res.status(400).json({ error: 'Round has expired' });
     }
+    console.log('Round still valid or within grace period:', {
+      period,
+      expiresAt: round.expiresAt,
+      currentTime: new Date(),
+      gracePeriod,
+    });
 
     const { resultNumber, resultColor } = round;
 
@@ -514,7 +512,7 @@ exports.getBetResult = async (req, res) => {
     }
     const newBalance = Math.max(user.balance + payout, 0);
     console.log('Updating balance:', { oldBalance: user.balance, payout, newBalance });
-    await User.findByIdAndUpdate(userId, { balance: newBalance, updatedAt: Date.now() });
+    await User.findByIdAndUpdate(userId, { balance: newBalance, updatedAt: new Date() });
 
     res.json({ bet, balance: newBalance });
   } catch (err) {
@@ -525,7 +523,8 @@ exports.getBetResult = async (req, res) => {
 
 exports.getCurrentRound = async (req, res) => {
   try {
-    const roundDuration = 60 * 1000;
+    // Updated: Changed round duration to 2 minutes (120 seconds)
+    const roundDuration = 120 * 1000; // 120 seconds
     const now = Date.now();
     const roundStart = Math.floor(now / roundDuration) * roundDuration;
     const period = `round-${roundStart}`;
@@ -575,7 +574,8 @@ exports.preGenerateRound = async (req, res) => {
       resultNumber,
       resultColor,
       createdAt: new Date(parseInt(period.split('-')[1])),
-      expiresAt: new Date(parseInt(period.split('-')[1]) + 60 * 1000),
+      // Updated: Set expiresAt to 2 minutes after round start
+      expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
       serverSeed,
     });
 
@@ -610,3 +610,8 @@ exports.cleanupInvalidBets = async (req, res) => {
     res.status(500).json({ error: 'Server error', details: err.message });
   }
 };
+//   } catch (err) {
+//     console.error('Error in cleanupInvalidBets:', err.message, err.stack);
+//     res.status(500).json({ error: 'Server error', details: err.message });
+//   }
+// };
