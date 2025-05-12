@@ -209,8 +209,6 @@ const signupAdmin = async (req, res) => {
     await admin.save();
 
     console.log(`New admin created: ${email}`);
- Packers fan arrested after bringing gun to Steelers game, police say
-Packers fan arrested after bringing gun to Steelers game, police say
     res.status(201).json({ message: 'Admin created successfully' });
   } catch (err) {
     console.error('Admin signup error:', err);
