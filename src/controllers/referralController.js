@@ -13,7 +13,7 @@ const getReferralLink = async (req, res) => {
     }
 
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-    const referralLink = `${baseUrl}/signup?ref=${referral.code}`;
+    const referralLink = `${baseUrl}/sign-up?ref=${referral.code}`;
 
     res.json({ referralLink });
   } catch (err) {
