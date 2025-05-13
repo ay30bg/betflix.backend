@@ -328,7 +328,7 @@ const validateBetInput = ({ type, value, amount, clientSeed, color }) => {
   if (type === 'number' && !/^\d$/.test(value)) return 'Invalid number value';
   if (!Number.isFinite(amount) || amount <= 0) return 'Invalid bet amount';
   if (!clientSeed || typeof clientSeed !== 'string' || clientSeed.length > 100) return 'Invalid clientSeed';
-  if (type === 'number' && !['Green', 'Red'].includes(color)) return 'Invalid color for number bet';
+  if (!['Green', 'Red'].includes(color)) return 'Invalid color';
   return null;
 };
 
@@ -339,7 +339,7 @@ const refundExpiredBets = async (round, session) => {
     const user = await User.findById(bet.userId).session(session);
     if (!user) continue;
     user.balance += bet.amount;
-    await user.save();
+    await user.save({ session });
     await new Transaction({
       userId: bet.userId,
       type: 'refund',
@@ -348,7 +348,32 @@ const refundExpiredBets = async (round, session) => {
       createdAt: new Date(),
     }).save({ session });
     bet.status = 'refunded';
-    await bet.save();
+    await bet.save({ session });
+  }
+};
+
+exports.getBetHistory = async (req, res) => {
+  try {
+    const bets = await Bet.find({ userId: req.user.id })
+      .sort({ createdAt: -1 })
+      .limit(10);
+    res.json(bets);
+  } catch (err) {
+    console.error('Error in getBetHistory:', err.message, err.stack);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+};
+
+exports.getBetStats = async (req, res) => {
+  try {
+    const bets = await Bet.find({ userId: req.user.id });
+    const totalBets = bets.length;
+    const wins = bets.filter((bet) => bet.won).length;
+    const losses = totalBets - wins;
+    res.json({ totalBets, wins, losses });
+  } catch (err) {
+    console.error('Error in getBetStats:', err.message, err.stack);
+    res.status(500).json({ error: 'Server error', details: err.message });
   }
 };
 
@@ -390,14 +415,16 @@ exports.placeBet = async (req, res) => {
     }
 
     // Check existing bets for this round
-    const existingBets = await Bet.find({ userFour existingBet in existingBets) {
-        if (existingBet.color !== color) {
-          console.error('Color mismatch:', { existingColor: existingBet.color, newColor: color });
-          return res.status(400).json({ error: 'All bets in a round must be on the same color' });
-        }
-      }
+    const existingBets = await Bet.find({ userId: req.user.id, period }).session(session);
+    if (existingBets.length >= 3) {
       console.error('Too many bets:', { betCount: existingBets.length });
       return res.status(400).json({ error: 'Maximum 3 bets per round' });
+    }
+    for (const existingBet of existingBets) {
+      if (existingBet.color !== color) {
+        console.error('Color mismatch:', { existingColor: existingBet.color, newColor: color });
+        return res.status(400).json({ error: 'All bets in a round must be on the same color' });
+      }
     }
 
     // Check Redis for round status
@@ -419,8 +446,9 @@ exports.placeBet = async (req, res) => {
       value,
       amount,
       clientSeed,
-      color: type === 'number' ? color : value,
+      color,
       createdAt: new Date(),
+      status: 'pending',
     });
     await bet.save({ session });
 
@@ -464,7 +492,7 @@ exports.getBetResult = async (req, res) => {
     }
 
     // Check if results are already processed
-    if (bets.every((bet) => bet.result && bet.won !== undefined)) {
+    if (bets.every((bet) => bet.status === 'processed')) {
       console.log('Returning existing bet results:', bets);
       return res.json({ bets });
     }
@@ -494,19 +522,18 @@ exports.getBetResult = async (req, res) => {
         expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
         serverSeed,
       });
-
       await round.save({ session });
       console.log('Round created:', { period, resultNumber, resultColor });
 
       // Cache round result in Redis
-      await redis.set(`round:${period}`, JSON.stringify({ resultNumber, resultColor }), 'EX', 130); // 130s TTL
+      await redis.set(`round:${period}`, JSON.stringify({ resultNumber, resultColor }), 'EX', 130);
     }
 
     // Check for round expiration
     const gracePeriod = 10000; // 10 seconds
     if (round.expiresAt < new Date() - gracePeriod) {
       console.error('Round expired:', { period, expiresAt: round.expiresAt });
-      await redis.set(`round:${period}`, 'expired', 'EX', 86400); // Cache expiration for 24h
+      await redis.set(`round:${period}`, 'expired', 'EX', 86400);
       await refundExpiredBets(round, session);
       await session.commitTransaction();
       return res.status(400).json({ error: 'Round has expired, bets refunded' });
@@ -521,6 +548,8 @@ exports.getBetResult = async (req, res) => {
 
     let totalPayout = 0;
     for (const bet of bets) {
+      if (bet.status === 'processed') continue; // Skip already processed bets
+
       let won = false;
       let payout = 0;
 
@@ -535,6 +564,7 @@ exports.getBetResult = async (req, res) => {
       bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
       bet.won = won;
       bet.payout = payout;
+      bet.status = 'processed';
       await bet.save({ session });
 
       totalPayout += payout;
@@ -564,7 +594,96 @@ exports.getBetResult = async (req, res) => {
   }
 };
 
-// Admin endpoint for house earnings withdrawal
+exports.getCurrentRound = async (req, res) => {
+  try {
+    const roundDuration = 120 * 1000; // 2 minutes
+    const now = Date.now();
+    const roundStart = Math.floor(now / roundDuration) * roundDuration;
+    const period = `round-${roundStart}`;
+    const expiresAt = new Date(roundStart + roundDuration).toISOString();
+    console.log('getCurrentRound:', { now, period, expiresAt });
+
+    const round = await Round.findOne({ period });
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.set('Surrogate-Control', 'no-store');
+
+    res.json({
+      period,
+      expiresAt,
+      result: round ? { resultNumber: round.resultNumber, resultColor: round.resultColor } : null,
+    });
+  } catch (err) {
+    console.error('Error in getCurrentRound:', err.message, err.stack);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+};
+
+exports.preGenerateRound = async (req, res) => {
+  try {
+    const { period } = req.body;
+    if (!/^round-\d+$/.test(period)) {
+      console.error('Invalid period format in preGenerateRound:', period);
+      return res.status(400).json({ error: 'Invalid period format' });
+    }
+
+    const existingRound = await Round.findOne({ period });
+    if (existingRound) {
+      console.log('Round already exists:', existingRound);
+      return res.json(existingRound);
+    }
+
+    const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
+    const combined = `${serverSeed}-${period}`;
+    const hash = crypto.createHash('sha256').update(combined).digest('hex');
+    const resultNumber = parseInt(hash.slice(0, 8), 16) % 10;
+    const resultColor = resultNumber % 2 === 0 ? 'Green' : 'Red';
+
+    const round = new Round({
+      period,
+      resultNumber,
+      resultColor,
+      createdAt: new Date(parseInt(period.split('-')[1])),
+      expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
+      serverSeed,
+    });
+
+    const savedRound = await Round.findOneAndUpdate(
+      { period },
+      { $setOnInsert: round },
+      { upsert: true, new: true }
+    );
+
+    console.log('Pre-generated round:', savedRound);
+    res.json(savedRound);
+  } catch (err) {
+    console.error('Error in preGenerateRound:', err.message, err.stack);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+};
+
+exports.cleanupInvalidBets = async (req, res) => {
+  try {
+    const result = await Bet.deleteMany({
+      $or: [
+        { type: { $exists: false } },
+        { value: { $exists: false } },
+        { amount: { $exists: false } },
+        { period: { $exists: false } },
+        { userId: { $exists: false } },
+        { status: { $exists: false } },
+      ],
+    });
+    console.log('Cleaned up invalid bets:', result);
+    res.json(result);
+  } catch (err) {
+    console.error('Error in cleanupInvalidBets:', err.message, err.stack);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+};
+
 exports.withdrawHouseEarnings = async (req, res) => {
   try {
     if (!req.user.isAdmin) {
