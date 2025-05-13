@@ -1,16 +1,318 @@
+// const User = require('../models/User');
+// const Admin = require('../models/Admin'); // Add Admin model
+// const Referral = require('../models/Referral');
+// const ResetToken = require('../models/ResetToken');
+// const bcrypt = require('bcryptjs');
+// const jwt = require('jsonwebtoken');
+// const { v4: uuidv4 } = require('uuid');
+// const sendEmail = require('../utils/sendEmail');
+
+// const signup = async (req, res) => {
+//   const { username, email, password, referralCode } = req.body;
+
+//   console.log('Signup attempt:', { username, email, password: '****' });
+
+//   if (!username || !email || !password) {
+//     return res.status(400).json({ error: 'Username, email, and password are required' });
+//   }
+
+//   try {
+//     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+//     if (existingUser) {
+//       console.log('User already exists:', { email, username });
+//       return res.status(400).json({ error: 'Username or email already taken' });
+//     }
+
+//     const user = await User.create({
+//       username,
+//       email,
+//       password, // Hashed by pre('save')
+//       balance: 0,
+//     });
+//     console.log('User created:', { id: user._id, email: user.email, passwordHash: user.password });
+
+//     if (referralCode) {
+//       const referral = await Referral.findOne({ code: referralCode });
+//       if (referral && !referral.referredUserId) {
+//         await Referral.updateOne(
+//           { code: referralCode },
+//           { referredUserId: user._id }
+//         );
+//         await User.updateOne(
+//           { _id: referral.referrerId },
+//           { $inc: { balance: 50 } }
+//         );
+//       }
+//     }
+
+//     await Referral.create({
+//       referrerId: user._id,
+//       code: uuidv4(),
+//     });
+
+//     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+//       expiresIn: '1h',
+//     });
+
+//     res.status(201).json({
+//       token,
+//       user: { id: user._id, username: user.username, email: user.email, balance: user.balance },
+//     });
+//   } catch (err) {
+//     console.error('Signup error:', err);
+//     res.status(500).json({ error: 'Failed to sign up' });
+//   }
+// };
+
+// const login = async (req, res) => {
+//   const { email, password } = req.body;
+
+//   console.log('Login attempt:', { email, password: '****' });
+
+//   if (!email || !password) {
+//     return res.status(400).json({ error: 'Email and password are required' });
+//   }
+
+//   try {
+//     const normalizedEmail = email.trim().toLowerCase();
+//     console.log('Normalized email:', normalizedEmail);
+
+//     const user = await User.findOne({ email: normalizedEmail });
+//     if (!user) {
+//       console.log('User not found for email:', normalizedEmail);
+//       return res.status(401).json({ error: 'Invalid credentials' });
+//     }
+
+//     console.log('Stored password hash:', user.password);
+//     const isMatch = await user.comparePassword(password);
+//     if (!isMatch) {
+//       console.log('Password mismatch for user:', normalizedEmail);
+//       return res.status(401).json({ error: 'Invalid credentials' });
+//     }
+
+//     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+//       expiresIn: '1h',
+//     });
+
+//     res.json({
+//       token,
+//       user: { id: user._id, username: user.username, email: user.email, balance: user.balance },
+//     });
+//   } catch (err) {
+//     console.error('Login error:', err);
+//     res.status(500).json({ error: 'Failed to log in' });
+//   }
+// };
+
+// // Admin Signup
+// const adminSignup = async (req, res) => {
+//   const { email, password, adminKey } = req.body;
+
+//   console.log('Admin signup attempt:', { email, password: '****' });
+
+//   if (!email || !password || !adminKey) {
+//     return res.status(400).json({ error: 'Email, password, and admin key are required' });
+//   }
+
+//   if (adminKey !== process.env.ADMIN_KEY) {
+//     console.log('Invalid admin key for email:', email);
+//     return res.status(403).json({ error: 'Invalid admin key' });
+//   }
+
+//   try {
+//     const existingAdmin = await Admin.findOne({ email });
+//     if (existingAdmin) {
+//       console.log('Admin already exists:', { email });
+//       return res.status(400).json({ error: 'Email already taken' });
+//     }
+
+//     const admin = await Admin.create({
+//       email,
+//       password, // Hashed by pre('save')
+//     });
+//     console.log('Admin created:', { id: admin._id, email: admin.email, passwordHash: admin.password });
+
+//     const token = jwt.sign({ adminId: admin._id, role: 'admin' }, process.env.JWT_SECRET, {
+//       expiresIn: '1h',
+//     });
+
+//     res.status(201).json({
+//       token,
+//       admin: { id: admin._id, email: admin.email },
+//     });
+//   } catch (err) {
+//     console.error('Admin signup error:', err);
+//     res.status(500).json({ error: 'Failed to sign up admin' });
+//   }
+// };
+
+// // Admin Login
+// const adminLogin = async (req, res) => {
+//   const { email, password } = req.body;
+
+//   console.log('Admin login attempt:', { email, password: '****' });
+
+//   if (!email || !password) {
+//     return res.status(400).json({ error: 'Email and password are required' });
+//   }
+
+//   try {
+//     const normalizedEmail = email.trim().toLowerCase();
+//     console.log('Normalized email:', normalizedEmail);
+
+//     const admin = await Admin.findOne({ email: normalizedEmail });
+//     if (!admin) {
+//       console.log('Admin not found for email:', normalizedEmail);
+//       return res.status(401).json({ error: 'Invalid credentials' });
+//     }
+
+//     console.log('Stored password hash:', admin.password);
+//     const isMatch = await admin.comparePassword(password);
+//     if (!isMatch) {
+//       console.log('Password mismatch for admin:', normalizedEmail);
+//       return res.status(401).json({ error: 'Invalid credentials' });
+//     }
+
+//     const token = jwt.sign({ adminId: admin._id, role: 'admin' }, process.env.JWT_SECRET, {
+//       expiresIn: '1h',
+//     });
+
+//     res.json({
+//       token,
+//       admin: { id: admin._id, email: admin.email },
+//     });
+//   } catch (err) {
+//     console.error('Admin login error:', err);
+//     res.status(500).json({ error: 'Failed to log in admin' });
+//   }
+// };
+
+// const logout = (req, res) => {
+//   res.json({ message: 'Logged out successfully' });
+// };
+
+// const forgotPassword = async (req, res) => {
+//   const { email } = req.body;
+
+//   if (!email) {
+//     return res.status(400).json({ error: 'Email is required' });
+//   }
+
+//   try {
+//     const user = await User.findOne({ email });
+//     if (!user) {
+//       return res.status(200).json({ message: 'If the email exists, a reset link has been sent.' });
+//     }
+
+//     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+//     await ResetToken.create({
+//       userId: user._id,
+//       token,
+//       expires: Date.now() + 60 * 60 * 1000,
+//     });
+
+//     const frontendUrl = process.env.FRONTEND_URL || 'https://betflix-one.vercel.app';
+//     const resetLink = `${frontendUrl.replace(/\/$/, '')}/reset-password?token=${token}&email=${email}`;
+//     console.log('Generated reset link:', resetLink);
+
+//     const html = `
+//       <!DOCTYPE html>
+//       <html>
+//       <body style="font-family: Arial, sans-serif; color: #1f2937;">
+//         <h2 style="color: #1e40af;">Betflix Password Reset</h2>
+//         <p>You requested a password reset. Click the button below to reset your password. This link expires in 1 hour.</p>
+//         <a href="${resetLink}" style="display: inline-block; padding: 12px 24px; background-color: #1e40af; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Reset Password</a>
+//         <p>If the button doesn't work, copy and paste this link into your browser:</p>
+//         <p><a href="${resetLink}" style="color: #3b82f6;">${resetLink}</a></p>
+//         <p>If you did not request this, please ignore this email.</p>
+//       </body>
+//       </html>
+//     `;
+//     await sendEmail(email, 'Betflix Password Reset', html);
+
+//     res.status(200).json({ message: 'If the email exists, a reset link has been sent.' });
+//   } catch (err) {
+//     console.error('Forgot password error:', err);
+//     res.status(500).json({ error: 'Server error' });
+//   }
+// };
+
+// const resetPassword = async (req, res) => {
+//   const { token, email, password } = req.body;
+
+//   if (!token || !email || !password) {
+//     return res.status(400).json({ error: 'All fields are required' });
+//   }
+
+//   try {
+//     let decoded;
+//     try {
+//       decoded = jwt.verify(token, process.env.JWT_SECRET);
+//     } catch (err) {
+//       return res.status(400).json({ error: 'Invalid or expired token' });
+//     }
+
+//     const user = await User.findOne({ _id: decoded.userId, email });
+//     if (!user) {
+//       return res.status(400).json({ error: 'Invalid user' });
+//     }
+
+//     const resetToken = await ResetToken.findOne({ userId: user._id, token });
+//     if (!resetToken || resetToken.expires < Date.now()) {
+//       return res.status(400).json({ error: 'Token expired or invalid' });
+//     }
+
+//     console.log('Updating password for user:', email, 'New password:', '****');
+//     user.password = password;
+//     await user.save();
+//     console.log('Password updated for user:', email);
+
+//     await ResetToken.deleteOne({ _id: resetToken._id });
+
+//     res.status(200).json({ message: 'Password reset successful' });
+//   } catch (err) {
+//     console.error('Reset password error:', err);
+//     res.status(500).json({ error: 'Server error' });
+//   }
+// };
+
+// module.exports = { signup, login, logout, forgotPassword, resetPassword, adminSignup, adminLogin };
+
+
 const User = require('../models/User');
-const Admin = require('../models/Admin'); // Add Admin model
+const Admin = require('../models/Admin');
 const Referral = require('../models/Referral');
 const ResetToken = require('../models/ResetToken');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
 const sendEmail = require('../utils/sendEmail');
+
+// Function to generate a unique 8-digit numeric referral code
+const generateReferralCode = async () => {
+  const min = 10000000; // 00000000
+  const max = 99999999; // 99999999
+  let code;
+  let isUnique = false;
+
+  while (!isUnique) {
+    code = Math.floor(Math.random() * (max - min + 1)) + min;
+    // Pad with leading zeros to ensure 8 digits
+    code = code.toString().padStart(8, '0');
+    // Check if code already exists
+    const existingReferral = await Referral.findOne({ code });
+    if (!existingReferral) {
+      isUnique = true;
+    }
+  }
+
+  return code;
+};
 
 const signup = async (req, res) => {
   const { username, email, password, referralCode } = req.body;
 
-  console.log('Signup attempt:', { username, email, password: '****' });
+  console.log('Signup attempt:', { username, email, password: '****', referralCode });
 
   if (!username || !email || !password) {
     return res.status(400).json({ error: 'Username, email, and password are required' });
@@ -32,23 +334,36 @@ const signup = async (req, res) => {
     console.log('User created:', { id: user._id, email: user.email, passwordHash: user.password });
 
     if (referralCode) {
-      const referral = await Referral.findOne({ code: referralCode });
-      if (referral && !referral.referredUserId) {
-        await Referral.updateOne(
-          { code: referralCode },
-          { referredUserId: user._id }
-        );
-        await User.updateOne(
-          { _id: referral.referrerId },
-          { $inc: { balance: 50 } }
-        );
+      // Validate referral code format (optional, since it’s now 8 digits)
+      if (!/^\d{8}$/.test(referralCode)) {
+        console.warn('Invalid referral code format:', referralCode);
+        // Optionally, skip referral processing or return an error
+        // return res.status(400).json({ error: 'Invalid referral code format' });
+      } else {
+        const referral = await Referral.findOne({ code: referralCode });
+        if (referral && !referral.referredUserId) {
+          await Referral.updateOne(
+            { code: referralCode },
+            { referredUserId: user._id }
+          );
+          await User.updateOne(
+            { _id: referral.referrerId },
+            { $inc: { balance: 50 } }
+          );
+          console.log('Referral applied:', { referralCode, referrerId: referral.referrerId });
+        } else {
+          console.warn('Referral not applied:', { referralCode, reason: referral ? 'Already used' : 'Not found' });
+        }
       }
     }
 
+    // Create a new referral code for the user
+    const newReferralCode = await generateReferralCode();
     await Referral.create({
       referrerId: user._id,
-      code: uuidv4(),
+      code: newReferralCode,
     });
+    console.log('New referral code created:', { userId: user._id, code: newReferralCode });
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: '1h',
@@ -64,36 +379,30 @@ const signup = async (req, res) => {
   }
 };
 
+// Other endpoints (unchanged)
 const login = async (req, res) => {
   const { email, password } = req.body;
-
   console.log('Login attempt:', { email, password: '****' });
-
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
-
   try {
     const normalizedEmail = email.trim().toLowerCase();
     console.log('Normalized email:', normalizedEmail);
-
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       console.log('User not found for email:', normalizedEmail);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
     console.log('Stored password hash:', user.password);
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       console.log('Password mismatch for user:', normalizedEmail);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
-
     res.json({
       token,
       user: { id: user._id, username: user.username, email: user.email, balance: user.balance },
@@ -104,38 +413,30 @@ const login = async (req, res) => {
   }
 };
 
-// Admin Signup
 const adminSignup = async (req, res) => {
   const { email, password, adminKey } = req.body;
-
   console.log('Admin signup attempt:', { email, password: '****' });
-
   if (!email || !password || !adminKey) {
     return res.status(400).json({ error: 'Email, password, and admin key are required' });
   }
-
   if (adminKey !== process.env.ADMIN_KEY) {
     console.log('Invalid admin key for email:', email);
     return res.status(403).json({ error: 'Invalid admin key' });
   }
-
   try {
     const existingAdmin = await Admin.findOne({ email });
     if (existingAdmin) {
       console.log('Admin already exists:', { email });
       return res.status(400).json({ error: 'Email already taken' });
     }
-
     const admin = await Admin.create({
       email,
-      password, // Hashed by pre('save')
+      password,
     });
     console.log('Admin created:', { id: admin._id, email: admin.email, passwordHash: admin.password });
-
     const token = jwt.sign({ adminId: admin._id, role: 'admin' }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
-
     res.status(201).json({
       token,
       admin: { id: admin._id, email: admin.email },
@@ -146,37 +447,29 @@ const adminSignup = async (req, res) => {
   }
 };
 
-// Admin Login
 const adminLogin = async (req, res) => {
   const { email, password } = req.body;
-
   console.log('Admin login attempt:', { email, password: '****' });
-
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
-
   try {
     const normalizedEmail = email.trim().toLowerCase();
     console.log('Normalized email:', normalizedEmail);
-
     const admin = await Admin.findOne({ email: normalizedEmail });
     if (!admin) {
       console.log('Admin not found for email:', normalizedEmail);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
     console.log('Stored password hash:', admin.password);
     const isMatch = await admin.comparePassword(password);
     if (!isMatch) {
       console.log('Password mismatch for admin:', normalizedEmail);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
     const token = jwt.sign({ adminId: admin._id, role: 'admin' }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
-
     res.json({
       token,
       admin: { id: admin._id, email: admin.email },
@@ -193,29 +486,23 @@ const logout = (req, res) => {
 
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
-
   if (!email) {
     return res.status(400).json({ error: 'Email is required' });
   }
-
   try {
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(200).json({ message: 'If the email exists, a reset link has been sent.' });
     }
-
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-
     await ResetToken.create({
       userId: user._id,
       token,
       expires: Date.now() + 60 * 60 * 1000,
     });
-
     const frontendUrl = process.env.FRONTEND_URL || 'https://betflix-one.vercel.app';
     const resetLink = `${frontendUrl.replace(/\/$/, '')}/reset-password?token=${token}&email=${email}`;
     console.log('Generated reset link:', resetLink);
-
     const html = `
       <!DOCTYPE html>
       <html>
@@ -230,7 +517,6 @@ const forgotPassword = async (req, res) => {
       </html>
     `;
     await sendEmail(email, 'Betflix Password Reset', html);
-
     res.status(200).json({ message: 'If the email exists, a reset link has been sent.' });
   } catch (err) {
     console.error('Forgot password error:', err);
@@ -240,11 +526,9 @@ const forgotPassword = async (req, res) => {
 
 const resetPassword = async (req, res) => {
   const { token, email, password } = req.body;
-
   if (!token || !email || !password) {
     return res.status(400).json({ error: 'All fields are required' });
   }
-
   try {
     let decoded;
     try {
@@ -252,29 +536,25 @@ const resetPassword = async (req, res) => {
     } catch (err) {
       return res.status(400).json({ error: 'Invalid or expired token' });
     }
-
     const user = await User.findOne({ _id: decoded.userId, email });
     if (!user) {
       return res.status(400).json({ error: 'Invalid user' });
     }
-
     const resetToken = await ResetToken.findOne({ userId: user._id, token });
     if (!resetToken || resetToken.expires < Date.now()) {
       return res.status(400).json({ error: 'Token expired or invalid' });
     }
-
     console.log('Updating password for user:', email, 'New password:', '****');
     user.password = password;
     await user.save();
     console.log('Password updated for user:', email);
-
     await ResetToken.deleteOne({ _id: resetToken._id });
-
     res.status(200).json({ message: 'Password reset successful' });
-  } catch (err) {
-    console.error('Reset password error:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
+  }missing: true
+} catch (err) {
+  console.error('Reset password error:', err);
+  res.status(500).json({ error: 'Server error' });
+}
 };
 
 module.exports = { signup, login, logout, forgotPassword, resetPassword, adminSignup, adminLogin };
