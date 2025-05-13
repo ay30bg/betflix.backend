@@ -334,11 +334,9 @@ const signup = async (req, res) => {
     console.log('User created:', { id: user._id, email: user.email, passwordHash: user.password });
 
     if (referralCode) {
-      // Validate referral code format (optional, since it’s now 8 digits)
+      // Validate referral code format (optional, since it’s 8 digits)
       if (!/^\d{8}$/.test(referralCode)) {
         console.warn('Invalid referral code format:', referralCode);
-        // Optionally, skip referral processing or return an error
-        // return res.status(400).json({ error: 'Invalid referral code format' });
       } else {
         const referral = await Referral.findOne({ code: referralCode });
         if (referral && !referral.referredUserId) {
@@ -379,30 +377,36 @@ const signup = async (req, res) => {
   }
 };
 
-// Other endpoints (unchanged)
 const login = async (req, res) => {
   const { email, password } = req.body;
+
   console.log('Login attempt:', { email, password: '****' });
+
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
+
   try {
     const normalizedEmail = email.trim().toLowerCase();
     console.log('Normalized email:', normalizedEmail);
+
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       console.log('User not found for email:', normalizedEmail);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+
     console.log('Stored password hash:', user.password);
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       console.log('Password mismatch for user:', normalizedEmail);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
+
     res.json({
       token,
       user: { id: user._id, username: user.username, email: user.email, balance: user.balance },
@@ -415,28 +419,35 @@ const login = async (req, res) => {
 
 const adminSignup = async (req, res) => {
   const { email, password, adminKey } = req.body;
+
   console.log('Admin signup attempt:', { email, password: '****' });
+
   if (!email || !password || !adminKey) {
     return res.status(400).json({ error: 'Email, password, and admin key are required' });
   }
+
   if (adminKey !== process.env.ADMIN_KEY) {
     console.log('Invalid admin key for email:', email);
     return res.status(403).json({ error: 'Invalid admin key' });
   }
+
   try {
     const existingAdmin = await Admin.findOne({ email });
     if (existingAdmin) {
       console.log('Admin already exists:', { email });
       return res.status(400).json({ error: 'Email already taken' });
     }
+
     const admin = await Admin.create({
       email,
-      password,
+      password, // Hashed by pre('save')
     });
     console.log('Admin created:', { id: admin._id, email: admin.email, passwordHash: admin.password });
+
     const token = jwt.sign({ adminId: admin._id, role: 'admin' }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
+
     res.status(201).json({
       token,
       admin: { id: admin._id, email: admin.email },
@@ -449,27 +460,34 @@ const adminSignup = async (req, res) => {
 
 const adminLogin = async (req, res) => {
   const { email, password } = req.body;
+
   console.log('Admin login attempt:', { email, password: '****' });
+
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
+
   try {
     const normalizedEmail = email.trim().toLowerCase();
     console.log('Normalized email:', normalizedEmail);
+
     const admin = await Admin.findOne({ email: normalizedEmail });
     if (!admin) {
       console.log('Admin not found for email:', normalizedEmail);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+
     console.log('Stored password hash:', admin.password);
     const isMatch = await admin.comparePassword(password);
     if (!isMatch) {
       console.log('Password mismatch for admin:', normalizedEmail);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+
     const token = jwt.sign({ adminId: admin._id, role: 'admin' }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
+
     res.json({
       token,
       admin: { id: admin._id, email: admin.email },
@@ -486,23 +504,29 @@ const logout = (req, res) => {
 
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
+
   if (!email) {
     return res.status(400).json({ error: 'Email is required' });
   }
+
   try {
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(200).json({ message: 'If the email exists, a reset link has been sent.' });
     }
+
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
     await ResetToken.create({
       userId: user._id,
       token,
       expires: Date.now() + 60 * 60 * 1000,
     });
+
     const frontendUrl = process.env.FRONTEND_URL || 'https://betflix-one.vercel.app';
     const resetLink = `${frontendUrl.replace(/\/$/, '')}/reset-password?token=${token}&email=${email}`;
     console.log('Generated reset link:', resetLink);
+
     const html = `
       <!DOCTYPE html>
       <html>
@@ -517,6 +541,7 @@ const forgotPassword = async (req, res) => {
       </html>
     `;
     await sendEmail(email, 'Betflix Password Reset', html);
+
     res.status(200).json({ message: 'If the email exists, a reset link has been sent.' });
   } catch (err) {
     console.error('Forgot password error:', err);
@@ -526,9 +551,11 @@ const forgotPassword = async (req, res) => {
 
 const resetPassword = async (req, res) => {
   const { token, email, password } = req.body;
+
   if (!token || !email || !password) {
     return res.status(400).json({ error: 'All fields are required' });
   }
+
   try {
     let decoded;
     try {
@@ -536,25 +563,29 @@ const resetPassword = async (req, res) => {
     } catch (err) {
       return res.status(400).json({ error: 'Invalid or expired token' });
     }
+
     const user = await User.findOne({ _id: decoded.userId, email });
     if (!user) {
       return res.status(400).json({ error: 'Invalid user' });
     }
+
     const resetToken = await ResetToken.findOne({ userId: user._id, token });
     if (!resetToken || resetToken.expires < Date.now()) {
       return res.status(400).json({ error: 'Token expired or invalid' });
     }
+
     console.log('Updating password for user:', email, 'New password:', '****');
     user.password = password;
     await user.save();
     console.log('Password updated for user:', email);
+
     await ResetToken.deleteOne({ _id: resetToken._id });
+
     res.status(200).json({ message: 'Password reset successful' });
-  }missing: true
-} catch (err) {
-  console.error('Reset password error:', err);
-  res.status(500).json({ error: 'Server error' });
-}
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 };
 
 module.exports = { signup, login, logout, forgotPassword, resetPassword, adminSignup, adminLogin };
