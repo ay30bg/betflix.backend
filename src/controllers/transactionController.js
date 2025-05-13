@@ -249,9 +249,10 @@ const initiateCryptoDeposit = async (req, res) => {
     let payCurrency = normalizedCrypto.toLowerCase();
     if (normalizedCrypto === 'USDT') {
       if (network === 'TRC20') payCurrency = 'usdttrc20';
-      else if (network === 'BEP20') payCurrency = 'usdtbep20';
-      else if (network === 'TON') payCurrency = 'usdt';
+      else if (network === 'BEP20') payCurrency = 'usdtbsc';
+      else if (network === 'TON') payCurrency = 'usdtton';
     }
+    console.log('Mapped payCurrency:', payCurrency);
 
     const response = await axios.post(
       `${nowpaymentsConfig.baseUrl}/payment`,
@@ -299,9 +300,10 @@ const initiateCryptoDeposit = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     console.error('Crypto deposit error:', JSON.stringify(err.response?.data, null, 2));
-    res.status(500).json({
-      error: 'Failed to initiate crypto deposit',
-      details: err.response?.data?.message || err.message,
+    const errorMessage = err.response?.data?.message || 'Failed to initiate crypto deposit';
+    res.status(err.response?.status || 500).json({
+      error: errorMessage,
+      details: err.response?.data || err.message,
     });
   } finally {
     session.endSession();
@@ -310,8 +312,10 @@ const initiateCryptoDeposit = async (req, res) => {
 
 // Initiate Crypto Withdrawal
 const initiateCryptoWithdrawal = async (req, res) => {
-  const { amount, cryptoCurrency, walletAddress, network } = req.body; // Added network
+  const { amount, cryptoCurrency, walletAddress, network } = req.body;
   const userId = req.user.id;
+
+  console.log('Withdrawal request:', { amount, cryptoCurrency, walletAddress, network, userId });
 
   if (!amount || amount <= 0) {
     return res.status(400).json({ error: 'Invalid withdrawal amount' });
@@ -323,8 +327,8 @@ const initiateCryptoWithdrawal = async (req, res) => {
   if (normalizedCrypto === 'USDT' && !['BEP20', 'TRC20', 'TON'].includes(network)) {
     return res.status(400).json({ error: 'Invalid or missing USDT network (must be BEP20, TRC20, or TON)' });
   }
-  if (!walletAddress || !/^[a-zA-Z0-9]{26,42}$/.test(walletAddress)) {
-    return res.status(400).json({ error: 'Invalid wallet address' });
+  if (!walletAddress || !/^[a-zA-Z0-9]{26,48}$/.test(walletAddress)) {
+    return res.status(400).json({ error: 'Invalid wallet address (26-48 characters)' });
   }
 
   const session = await mongoose.startSession();
@@ -337,11 +341,10 @@ const initiateCryptoWithdrawal = async (req, res) => {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
 
-    const payCurrency = normalizedCrypto === 'USDT' 
-      ? (network === 'TRC20' ? 'usdttrc20' : 
-         network === 'BEP20' ? 'usdtbep20' : 
-         'usdt')
+    const payCurrency = normalizedCrypto === 'USDT'
+      ? (network === 'TRC20' ? 'usdttrc20' : network === 'BEP20' ? 'usdtbsc' : 'usdtton')
       : normalizedCrypto.toLowerCase();
+    console.log('Mapped payCurrency:', payCurrency);
 
     const response = await axios.post(
       `${nowpaymentsConfig.baseUrl}/payout`,
@@ -378,7 +381,7 @@ const initiateCryptoWithdrawal = async (req, res) => {
           cryptoCurrency: normalizedCrypto,
           paymentId: payout_id,
           walletAddress,
-          network, // Store network for withdrawal
+          network,
         },
       ],
       { session }
@@ -392,9 +395,10 @@ const initiateCryptoWithdrawal = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     console.error('Crypto withdrawal error:', JSON.stringify(err.response?.data, null, 2));
-    res.status(500).json({
-      error: 'Failed to initiate crypto withdrawal',
-      details: err.response?.data?.message || err.message,
+    const errorMessage = err.response?.data?.message || 'Failed to initiate crypto withdrawal';
+    res.status(err.response?.status || 500).json({
+      error: errorMessage,
+      details: err.response?.data || err.message,
     });
   } finally {
     session.endSession();
