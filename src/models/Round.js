@@ -25,10 +25,7 @@ const roundSchema = new mongoose.Schema({
   serverSeed: { type: String }, // For provably fair verification
 });
 
-// Remove the TTL index
-// roundSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // Commented out
-
-// Ensure an index on createdAt for efficient sorting
-roundSchema.index({ createdAt: -1 });
+Remove the TTL index
+roundSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 10800 }); 
 
 module.exports = mongoose.model('Round', roundSchema);
