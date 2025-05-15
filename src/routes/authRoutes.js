@@ -30,7 +30,7 @@ const express = require('express');
 const router = express.Router();
 const { login, logout, signup, forgotPassword, resetPassword, adminLogin, verifyEmail, resendVerification } = require('../controllers/authController');
 const rateLimit = require('express-rate-limit');
-const authenticateToken = require('../middleware/auth'); // Assuming middleware is in a separate file
+
 
 const forgotPasswordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -50,7 +50,7 @@ router.post('/signup', signup);
 router.post('/forgot-password', forgotPasswordLimiter, forgotPassword);
 router.post('/reset-password', resetPassword);
 router.post('/api/auth/admin/login', adminLoginLimiter, adminLogin);
-router.post('/api/auth/verify-email', authenticateToken, verifyEmail); // Add verify-email route
-router.post('/api/auth/resend-verification', authenticateToken, resendVerification); // Add resend-verification route
+router.post('/verify-email', verifyEmail); // Add verify-email route
+router.post('/resend-verification', resendVerification); // Add resend-verification route
 
 module.exports = router;
