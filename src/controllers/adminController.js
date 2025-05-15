@@ -132,7 +132,7 @@ const forgotPassword = async (req, res) => {
 
     await admin.save();
 
-    const resetUrl = `https://admin-betflix.vercel.app/reset-password/${resetToken}`;
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
     const mailOptions = {
       to: admin.email,
       from: process.env.EMAIL_USER,
