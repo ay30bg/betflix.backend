@@ -10,6 +10,7 @@ const transactionRoutes = require('./routes/transactionRoutes');
 const referralRoutes = require('./routes/referralRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const analyticsRoutes  = require('./routes/analyticsRoutes');
+const roundRoutes  = require('./routes/roundRoutes');
 require('dotenv').config();
 
 const app = express();
@@ -83,7 +84,8 @@ app.use('/api/bets', betRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/referral', referralRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/analytics', analyticsRoutes); // Add this line
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/round', roundRoutes); 
 
 // Error handling
 app.use((err, req, res, next) => {
