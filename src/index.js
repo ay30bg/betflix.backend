@@ -85,7 +85,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/referral', referralRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api/round', roundRoutes); 
+app.use('/api/rounds', roundRoutes); 
 
 // Error handling
 app.use((err, req, res, next) => {
