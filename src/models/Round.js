@@ -25,7 +25,6 @@ const roundSchema = new mongoose.Schema({
   serverSeed: { type: String }, // For provably fair verification
 });
 
-Remove the TTL index
 roundSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 10800 }); 
 
 module.exports = mongoose.model('Round', roundSchema);
