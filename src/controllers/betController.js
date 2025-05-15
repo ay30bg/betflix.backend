@@ -335,6 +335,37 @@ exports.setRoundOutcome = async (req, res) => {
   }
 };
 
+exports.getRoundResult = async (req, res) => {
+  try {
+    const { period } = req.params;
+    console.log('Fetching round result:', { period, adminId: req.admin.id });
+
+    if (!/^round-\d+$/.test(period)) {
+      console.error('Invalid period format:', period);
+      return res.status(400).json({ error: 'Invalid period format' });
+    }
+
+    const round = await Round.findOne({ period });
+    if (!round) {
+      console.error('Round not found:', { period });
+      return res.status(404).json({ error: 'Round not found' });
+    }
+
+    res.json({
+      period: round.period,
+      result: {
+        number: round.resultNumber.toString(),
+        color: round.resultColor,
+      },
+      createdAt: round.createdAt,
+      expiresAt: round.expiresAt,
+    });
+  } catch (err) {
+    console.error('Error in getRoundResult:', err.message, err.stack);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+};
+
 exports.getAllRounds = async (req, res) => {
   try {
     // Fetch all rounds, sorted by createdAt in descending order, limited to 100
