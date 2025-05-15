@@ -306,34 +306,6 @@ exports.cleanupInvalidBets = async (req, res) => {
   }
 };
 
-// exports.setRoundOutcome = async (req, res) => {
-//   try {
-//     const { period } = req.params;
-//     const { resultNumber, resultColor } = req.body;
-
-//     if (!/^round-\d+$/.test(period)) {
-//       console.error('Invalid period format:', period);
-//       return res.status(400).json({ error: 'Invalid period format' });
-//     }
-
-//     const round = await Round.findOne({ period });
-//     if (!round) {
-//       console.error('Round not found:', period);
-//       return res.status(404).json({ error: 'Round not found' });
-//     }
-
-//     round.resultNumber = resultNumber;
-//     round.resultColor = resultColor;
-//     round.updatedAt = new Date();
-
-//     await round.save();
-//     console.log('Round outcome updated:', { period, resultNumber, resultColor });
-//     res.json(round);
-//   } catch (err) {
-//     console.error('Error in setRoundOutcome:', err.message, err.stack);
-//     res.status(500).json({ error: 'Server error', details: err.message });
-//   }
-// };
 exports.setRoundOutcome = async (req, res) => {
   try {
     const { period } = req.params;
