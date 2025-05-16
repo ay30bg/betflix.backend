@@ -218,21 +218,49 @@ exports.placeBet = async (req, res) => {
 //   }
 // };
 
+const PAYOUT_MULTIPLIERS = {
+  color: 1.9,
+  number: 6.8,
+};
+
 exports.getBetResult = async (req, res) => {
   try {
     const { period } = req.params;
     const userId = req.user.id;
-    console.log('Fetching bet result:', { period, userId });
+    const roundDuration = 120 * 1000; // 2 minutes, same as getCurrentRound
+    console.log('Fetching bet result:', { period });
 
-    if (!/^round-\d+$/.test(period)) {
+    // Validate period format: must be round-<timestamp> where timestamp is divisible by roundDuration
+    const periodMatch = period.match(/^round-(\d+)$/);
+    if (!periodMatch) {
       console.error('Invalid period format:', period);
-      return res.status(400).json({ error: 'Invalid period format' });
+      return res.status(400).json({ error: 'Invalid period format. Expected round-<timestamp>' });
+    }
+
+    const timestamp = parseInt(periodMatch[1]);
+    if (timestamp % roundDuration !== 0) {
+      console.error('Invalid period timestamp: not aligned with round duration:', period);
+      return res.status(400).json({
+        error: 'Invalid period timestamp. Must be aligned with 2-minute round duration',
+      });
     }
 
     const bet = await Bet.findOne({ userId, period });
     if (!bet) {
       console.error('Bet not found:', { userId, period });
       return res.status(404).json({ error: 'Bet not found for this round' });
+    }
+
+    const validBetTypes = ['color', 'number'];
+    const validColors = ['Green', 'Red'];
+    if (!validBetTypes.includes(bet.type)) {
+      return res.status(400).json({ error: 'Invalid bet type' });
+    }
+    if (bet.type === 'color' && !validColors.includes(bet.value)) {
+      return res.status(400).json({ error: 'Invalid color value' });
+    }
+    if (bet.type === 'number' && !/^\d$/.test(bet.value)) {
+      return res.status(400).json({ error: 'Invalid number value' });
     }
 
     if (bet.result && bet.won !== undefined) {
@@ -242,8 +270,6 @@ exports.getBetResult = async (req, res) => {
 
     let round = await Round.findOne({ period });
     if (!round) {
-      console.log('No round found for period:', period);
-      // Only generate a new round if it hasn't been manually set
       const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
       const combined = `${serverSeed}-${period}`;
       const hash = crypto.createHash('sha256').update(combined).digest('hex');
@@ -254,10 +280,10 @@ exports.getBetResult = async (req, res) => {
         period,
         resultNumber,
         resultColor,
-        createdAt: new Date(parseInt(period.split('-')[1])),
-        expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
+        createdAt: new Date(timestamp),
+        expiresAt: new Date(timestamp + roundDuration),
         serverSeed,
-        isManuallySet: false, // Auto-generated round
+        isManuallySet: false,
       });
 
       const existingRound = await Round.findOneAndUpdate(
@@ -277,7 +303,7 @@ exports.getBetResult = async (req, res) => {
     }
 
     const gracePeriod = 10000; // 10 seconds
-    if (round.expiresAt < new Date() - gracePeriod) {
+    if (round.expiresAt < new Date(Date.now() - gracePeriod)) {
       console.error('Round expired beyond grace period:', {
         period,
         expiresAt: round.expiresAt,
@@ -294,14 +320,11 @@ exports.getBetResult = async (req, res) => {
 
     if (bet.type === 'color') {
       won = bet.value === resultColor;
-      payout = won ? bet.amount * 1.9 : 0;
+      payout = won ? bet.amount * PAYOUT_MULTIPLIERS.color : 0;
     } else if (bet.type === 'number') {
-      if (bet.value == resultNumber) {
+      if (parseInt(bet.value) === resultNumber) {
         won = true;
-        payout = bet.amount * 6.8;
-      } else {
-        won = false;
-        payout = 0;
+        payout = bet.amount * PAYOUT_MULTIPLIERS.number;
       }
     }
 
@@ -313,24 +336,34 @@ exports.getBetResult = async (req, res) => {
       isManuallySet: round.isManuallySet,
     });
 
-    bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
-    bet.won = won;
-    bet.payout = payout;
-    await bet.save();
+    const session = await Bet.startSession();
+    session.startTransaction();
+    try {
+      bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
+      bet.won = won;
+      bet.payout = payout;
+      await bet.save({ session });
 
-    const user = await User.findById(userId);
-    if (!user) {
-      console.error('User not found during balance update:', userId);
-      return res.status(404).json({ error: 'User not found' });
+      const user = await User.findByIdAndUpdate(
+        userId,
+        { $set: { balance: Math.max(user.balance + payout, 0), updatedAt: new Date() } },
+        { new: true, session }
+      );
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      await session.commitTransaction();
+      res.json({ bet, balance: user.balance });
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
     }
-    const newBalance = Math.max(user.balance + payout, 0);
-    console.log('Updating balance:', { oldBalance: user.balance, payout, newBalance });
-    await User.findByIdAndUpdate(userId, { balance: newBalance, updatedAt: new Date() });
-
-    res.json({ bet, balance: newBalance });
   } catch (err) {
     console.error('Error in getBetResult:', err.message, err.stack);
-    res.status(500).json({ error: 'Server error', details: err.message });
+    res.status(500).json({ error: 'Server error' });
   }
 };
 
