@@ -68,15 +68,93 @@ exports.preGenerateRound = async (req, res) => {
   }
 };
 
+// exports.setRoundOutcome = async (req, res) => {
+//   try {
+//     const { period } = req.params;
+//     const { resultNumber, resultColor } = req.body;
+
+//     // Validate period format
+//     if (!/^round-\d+$/.test(period)) {
+//       console.error('Invalid period format:', period);
+//       return res.status(400).json({ error: 'Invalid period format' });
+//     }
+
+//     // Validate resultNumber (0-9)
+//     if (!Number.isInteger(resultNumber) || resultNumber < 0 || resultNumber > 9) {
+//       console.error('Invalid resultNumber:', resultNumber);
+//       return res.status(400).json({ error: 'resultNumber must be an integer between 0 and 9' });
+//     }
+
+//     // Validate resultColor
+//     if (!['Green', 'Red'].includes(resultColor)) {
+//       console.error('Invalid resultColor:', resultColor);
+//       return res.status(400).json({ error: 'resultColor must be Green or Red' });
+//     }
+
+//     // Ensure admin authentication (assumed middleware sets req.admin)
+//     if (!req.admin || !req.admin.id) {
+//       console.error('Unauthorized attempt to set round outcome:', { period, adminId: req.admin?.id });
+//       return res.status(403).json({ error: 'Admin access required' });
+//     }
+
+//     const round = await Round.findOne({ period });
+//     if (!round) {
+//       console.error('Round not found:', period);
+//       return res.status(404).json({ error: 'Round not found' });
+//     }
+
+//     // Prevent updating expired rounds (optional, depending on requirements)
+//     const gracePeriod = 10000; // 10 seconds
+//     if (round.expiresAt < new Date() - gracePeriod) {
+//       console.error('Cannot update expired round:', { period, expiresAt: round.expiresAt });
+//       return res.status(400).json({ error: 'Cannot update expired round' });
+//     }
+
+//     // Update round
+//     round.resultNumber = resultNumber;
+//     round.resultColor = resultColor;
+//     round.isManuallySet = true; // Mark as manually set
+//     round.updatedAt = new Date();
+
+//     await round.save();
+//     console.log('Round outcome updated by admin:', {
+//       period,
+//       resultNumber,
+//       resultColor,
+//       adminId: req.admin.id,
+//       isManuallySet: true,
+//     });
+
+//     res.json({
+//       period: round.period,
+//       resultNumber: round.resultNumber,
+//       resultColor: round.resultColor,
+//       isManuallySet: round.isManuallySet,
+//       updatedAt: round.updatedAt,
+//     });
+//   } catch (err) {
+//     console.error('Error in setRoundOutcome:', err.message, err.stack);
+//     res.status(500).json({ error: 'Server error', details: err.message });
+//   }
+// };
+
 exports.setRoundOutcome = async (req, res) => {
   try {
     const { period } = req.params;
     const { resultNumber, resultColor } = req.body;
 
-    // Validate period format
-    if (!/^round-\d+$/.test(period)) {
+    // Validate period format (round-<timestamp>)
+    if (!/^round-\d{10,}$/.test(period)) {
       console.error('Invalid period format:', period);
-      return res.status(400).json({ error: 'Invalid period format' });
+      return res.status(400).json({ error: 'Invalid period format, expected round-<timestamp>' });
+    }
+
+    // Extract timestamp from period and validate it's a number
+    const timestampStr = period.replace('round-', '');
+    const timestamp = parseInt(timestampStr, 10);
+    if (isNaN(timestamp) || timestamp <= 0) {
+      console.error('Invalid timestamp in period:', period);
+      return res.status(400).json({ error: 'Period timestamp must be a valid number' });
     }
 
     // Validate resultNumber (0-9)
@@ -105,7 +183,7 @@ exports.setRoundOutcome = async (req, res) => {
 
     // Prevent updating expired rounds (optional, depending on requirements)
     const gracePeriod = 10000; // 10 seconds
-    if (round.expiresAt < new Date() - gracePeriod) {
+    if (round.expiresAt < new Date(Date.now() - gracePeriod)) {
       console.error('Cannot update expired round:', { period, expiresAt: round.expiresAt });
       return res.status(400).json({ error: 'Cannot update expired round' });
     }
@@ -134,7 +212,7 @@ exports.setRoundOutcome = async (req, res) => {
     });
   } catch (err) {
     console.error('Error in setRoundOutcome:', err.message, err.stack);
-    res.status(500).json({ error: 'Server error', details: err.message });
+    res.status(500 varm.json({ error: 'Server error', details: err.message });
   }
 };
 
