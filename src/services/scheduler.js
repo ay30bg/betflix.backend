@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com'; // Set in .env
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'yourpassword'; // Set in .env
 const JWT_SECRET = process.env.JWT_SECRET; // Required for token verification
-const BASE_URL = process.env.BASE_URL || 'http://betflix-one.vercel.app'; // Set in .env or default to localhost
+const BASE_URLS = process.env.BASE_URLS || 'http://betflix-one.vercel.app'; // Set in .env or default to localhost
 
 // Validate environment variables
 if (!JWT_SECRET) {
@@ -27,7 +27,7 @@ const getAdminToken = async () => {
   try {
     if (!adminToken) {
       console.log('Fetching new admin token');
-      const response = await axios.post(`${BASE_URL}/admin/login`, {
+      const response = await axios.post(`${BASE_URLS}/admin/login`, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
       });
@@ -52,7 +52,7 @@ const createRound = async () => {
   try {
     const token = await getAdminToken();
     const response = await axios.post(
-      `${BASE_URL}/admin/rounds`,
+      `${BASE_URLS}/admin/rounds`,
       {}, // Empty body to create next round
       {
         headers: {
