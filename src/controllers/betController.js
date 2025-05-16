@@ -111,6 +111,113 @@ exports.placeBet = async (req, res) => {
   }
 };
 
+// exports.getBetResult = async (req, res) => {
+//   try {
+//     const { period } = req.params;
+//     const userId = req.user.id;
+//     console.log('Fetching bet result:', { period, userId });
+
+//     if (!/^round-\d+$/.test(period)) {
+//       console.error('Invalid period format:', period);
+//       return res.status(400).json({ error: 'Invalid period format' });
+//     }
+
+//     const bet = await Bet.findOne({ userId, period });
+//     if (!bet) {
+//       console.error('Bet not found:', { userId, period });
+//       return res.status(404).json({ error: 'Bet not found for this round' });
+//     }
+
+//     if (bet.result && bet.won !== undefined) {
+//       console.log('Returning existing bet result:', bet);
+//       return res.json({ bet });
+//     }
+
+//     let round = await Round.findOne({ period });
+//     if (!round) {
+//       console.log('Creating new round for period:', period);
+//       const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
+//       const combined = `${serverSeed}-${period}`;
+//       const hash = crypto.createHash('sha256').update(combined).digest('hex');
+//       const resultNumber = parseInt(hash.slice(0, 8), 16) % 10;
+//       const resultColor = resultNumber % 2 === 0 ? 'Green' : 'Red';
+
+//       round = new Round({
+//         period,
+//         resultNumber,
+//         resultColor,
+//         createdAt: new Date(parseInt(period.split('-')[1])),
+//         expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
+//         serverSeed,
+//       });
+
+//       const existingRound = await Round.findOneAndUpdate(
+//         { period },
+//         { $setOnInsert: round },
+//         { upsert: true, new: true }
+//       );
+//       round = existingRound;
+//       console.log('Round saved:', { period, resultNumber, resultColor });
+//     }
+
+//     const gracePeriod = 10000; // 10 seconds
+//     if (round.expiresAt < new Date() - gracePeriod) {
+//       console.error('Round expired beyond grace period:', {
+//         period,
+//         expiresAt: round.expiresAt,
+//         currentTime: new Date(),
+//         gracePeriod,
+//       });
+//       return res.status(400).json({ error: 'Round has expired' });
+//     }
+//     console.log('Round still valid or within grace period:', {
+//       period,
+//       expiresAt: round.expiresAt,
+//       currentTime: new Date(),
+//       gracePeriod,
+//     });
+
+//     const { resultNumber, resultColor } = round;
+
+//     let won = false;
+//     let payout = 0;
+
+//     if (bet.type === 'color') {
+//       won = bet.value === resultColor;
+//       payout = won ? bet.amount * 1.9 : 0; // Updated to 1.9x for color bets
+//     } else if (bet.type === 'number') {
+//       if (bet.value == resultNumber) {
+//         won = true;
+//         payout = bet.amount * 6.8; // Updated to 6.8x for number bets
+//       } else {
+//         won = false;
+//         payout = 0; // Number bet loses if exact number isn't matched
+//       }
+//     }
+
+//     console.log('Bet result calculated:', { won, payout, resultNumber, resultColor });
+
+//     bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
+//     bet.won = won;
+//     bet.payout = payout;
+//     await bet.save();
+
+//     const user = await User.findById(userId);
+//     if (!user) {
+//       console.error('User not found during balance update:', userId);
+//       return res.status(404).json({ error: 'User not found' });
+//     }
+//     const newBalance = Math.max(user.balance + payout, 0);
+//     console.log('Updating balance:', { oldBalance: user.balance, payout, newBalance });
+//     await User.findByIdAndUpdate(userId, { balance: newBalance, updatedAt: new Date() });
+
+//     res.json({ bet, balance: newBalance });
+//   } catch (err) {
+//     console.error('Error in getBetResult:', err.message, err.stack);
+//     res.status(500).json({ error: 'Server error', details: err.message });
+//   }
+// };
+
 exports.getBetResult = async (req, res) => {
   try {
     const { period } = req.params;
@@ -135,7 +242,8 @@ exports.getBetResult = async (req, res) => {
 
     let round = await Round.findOne({ period });
     if (!round) {
-      console.log('Creating new round for period:', period);
+      console.log('No round found for period:', period);
+      // Only generate a new round if it hasn't been manually set
       const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
       const combined = `${serverSeed}-${period}`;
       const hash = crypto.createHash('sha256').update(combined).digest('hex');
@@ -149,6 +257,7 @@ exports.getBetResult = async (req, res) => {
         createdAt: new Date(parseInt(period.split('-')[1])),
         expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
         serverSeed,
+        isManuallySet: false, // Auto-generated round
       });
 
       const existingRound = await Round.findOneAndUpdate(
@@ -157,7 +266,14 @@ exports.getBetResult = async (req, res) => {
         { upsert: true, new: true }
       );
       round = existingRound;
-      console.log('Round saved:', { period, resultNumber, resultColor });
+      console.log('Round created:', { period, resultNumber, resultColor, isManuallySet: false });
+    } else {
+      console.log('Using existing round:', {
+        period,
+        resultNumber: round.resultNumber,
+        resultColor: round.resultColor,
+        isManuallySet: round.isManuallySet,
+      });
     }
 
     const gracePeriod = 10000; // 10 seconds
@@ -170,12 +286,6 @@ exports.getBetResult = async (req, res) => {
       });
       return res.status(400).json({ error: 'Round has expired' });
     }
-    console.log('Round still valid or within grace period:', {
-      period,
-      expiresAt: round.expiresAt,
-      currentTime: new Date(),
-      gracePeriod,
-    });
 
     const { resultNumber, resultColor } = round;
 
@@ -184,18 +294,24 @@ exports.getBetResult = async (req, res) => {
 
     if (bet.type === 'color') {
       won = bet.value === resultColor;
-      payout = won ? bet.amount * 1.9 : 0; // Updated to 1.9x for color bets
+      payout = won ? bet.amount * 1.9 : 0;
     } else if (bet.type === 'number') {
       if (bet.value == resultNumber) {
         won = true;
-        payout = bet.amount * 6.8; // Updated to 6.8x for number bets
+        payout = bet.amount * 6.8;
       } else {
         won = false;
-        payout = 0; // Number bet loses if exact number isn't matched
+        payout = 0;
       }
     }
 
-    console.log('Bet result calculated:', { won, payout, resultNumber, resultColor });
+    console.log('Bet result calculated:', {
+      won,
+      payout,
+      resultNumber,
+      resultColor,
+      isManuallySet: round.isManuallySet,
+    });
 
     bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
     bet.won = won;
