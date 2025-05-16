@@ -17,8 +17,8 @@ router.get('/current', getCurrentRound);
 router.get('/', authMiddleware, adminAuthMiddleware, getAllRounds);
 router.post(
   '/pre-generate',
-  authMiddleware,
-  adminAuthMiddleware,
+  // authMiddleware,
+  // adminAuthMiddleware,
   [body('period').matches(/^round-\d+$/).withMessage('Invalid period format')],
   (req, res, next) => {
     const errors = validationResult(req);
