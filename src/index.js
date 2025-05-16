@@ -11,6 +11,7 @@ const referralRoutes = require('./routes/referralRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const analyticsRoutes  = require('./routes/analyticsRoutes');
 const roundRoutes  = require('./routes/roundRoutes');
+const scheduler = require('../services/scheduler'); // Import scheduler
 require('dotenv').config();
 
 const app = express();
