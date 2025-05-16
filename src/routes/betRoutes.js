@@ -21,7 +21,7 @@ router.get('/stats', authMiddleware, getBetStats);
 router.post('/', authMiddleware, placeBet);
 router.get('/current', authMiddleware, getCurrentRound);
 router.get('/result/:period', authMiddleware, getBetResult);
-router.post('/pre-generate-round', authMiddleware, preGenerateRound);
+router.post('/pre-generate-round', preGenerateRound);
 router.delete('/cleanup', authMiddleware, cleanupInvalidBets);
 router.get('/rounds/history', authMiddleware, getAllRounds); // New route for all rounds history
 
