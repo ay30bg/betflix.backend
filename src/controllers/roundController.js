@@ -212,7 +212,7 @@ exports.setRoundOutcome = async (req, res) => {
     });
   } catch (err) {
     console.error('Error in setRoundOutcome:', err.message, err.stack);
-    res.status(500 varm.json({ error: 'Server error', details: err.message });
+    res.status(500).json({ error: 'Server error', details: err.message });
   }
 };
 
