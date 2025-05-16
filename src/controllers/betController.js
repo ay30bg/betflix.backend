@@ -400,15 +400,61 @@ exports.getCurrentRound = async (req, res) => {
   }
 };
 
+// exports.preGenerateRound = async (req, res) => {
+//   try {
+//     const { period } = req.body;
+//     if (!/^round-\d+$/.test(period)) {
+//       console.error('Invalid period format in preGenerateRound:', period);
+//       return res.status(400).json({ error: 'Invalid period format' });
+//     }
+
+//     const existingRound = await Round.findOne({ period });
+//     if (existingRound) {
+//       console.log('Round already exists:', existingRound);
+//       return res.json(existingRound);
+//     }
+
+//     const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
+//     const combined = `${serverSeed}-${period}`;
+//     const hash = crypto.createHash('sha256').update(combined).digest('hex');
+//     const resultNumber = parseInt(hash.slice(0, 8), 16) % 10;
+//     const resultColor = resultNumber % 2 === 0 ? 'Green' : 'Red';
+
+//     const round = new Round({
+//       period,
+//       resultNumber,
+//       resultColor,
+//       createdAt: new Date(parseInt(period.split('-')[1])),
+//       expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
+//       serverSeed,
+//     });
+
+//     const savedRound = await Round.findOneAndUpdate(
+//       { period },
+//       { $setOnInsert: round },
+//       { upsert: true, new: true }
+//     );
+
+//     console.log('Pre-generated round:', savedRound);
+//     res.json(savedRound);
+//   } catch (err) {
+//     console.error('Error in preGenerateRound:', err.message, err.stack);
+//     res.status(500).json({ error: 'Server error', details: err.message });
+//   }
+// };
+
 exports.preGenerateRound = async (req, res) => {
   try {
     const { period } = req.body;
+    console.log('preGenerateRound called with:', { period, user: req.user?.id });
+
     if (!/^round-\d+$/.test(period)) {
       console.error('Invalid period format in preGenerateRound:', period);
       return res.status(400).json({ error: 'Invalid period format' });
     }
 
     const existingRound = await Round.findOne({ period });
+    console.log('Existing round check:', { period, found: !!existingRound });
     if (existingRound) {
       console.log('Round already exists:', existingRound);
       return res.json(existingRound);
@@ -428,17 +474,27 @@ exports.preGenerateRound = async (req, res) => {
       expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
       serverSeed,
     });
+    console.log('New round created:', round);
 
     const savedRound = await Round.findOneAndUpdate(
       { period },
       { $setOnInsert: round },
       { upsert: true, new: true }
     );
+    console.log('Round saved to DB:', savedRound);
 
-    console.log('Pre-generated round:', savedRound);
+    // Verify the document exists in the database
+    const verifyRound = await Round.findOne({ period });
+    console.log('Verification check:', { period, found: !!verifyRound, document: verifyRound });
+
     res.json(savedRound);
   } catch (err) {
-    console.error('Error in preGenerateRound:', err.message, err.stack);
+    console.error('Error in preGenerateRound:', {
+      message: err.message,
+      stack: err.stack,
+      code: err.code,
+      name: err.name
+    });
     res.status(500).json({ error: 'Server error', details: err.message });
   }
 };
