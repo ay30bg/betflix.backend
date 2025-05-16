@@ -10,7 +10,7 @@ const transactionRoutes = require('./routes/transactionRoutes');
 const referralRoutes = require('./routes/referralRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const analyticsRoutes  = require('./routes/analyticsRoutes');
-const scheduler = require('../services/scheduler'); // Import scheduler
+const scheduler = require('./services/scheduler'); // Import scheduler
 require('dotenv').config();
 
 const app = express();
