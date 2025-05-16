@@ -339,22 +339,28 @@ exports.getBetResult = async (req, res) => {
     const session = await Bet.startSession();
     session.startTransaction();
     try {
+      // Save bet updates
       bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
       bet.won = won;
       bet.payout = payout;
       await bet.save({ session });
 
-      const user = await User.findByIdAndUpdate(
-        userId,
-        { $set: { balance: Math.max(user.balance + payout, 0), updatedAt: new Date() } },
-        { new: true, session }
-      );
+      // Fetch user to get current balance
+      const user = await User.findById(userId).session(session);
       if (!user) {
         throw new Error('User not found');
       }
 
+      // Update user balance
+      const newBalance = Math.max(user.balance + payout, 0);
+      await User.findByIdAndUpdate(
+        userId,
+        { $set: { balance: newBalance, updatedAt: new Date() } },
+        { session }
+      );
+
       await session.commitTransaction();
-      res.json({ bet, balance: user.balance });
+      res.json({ bet, balance: newBalance });
     } catch (err) {
       await session.abortTransaction();
       throw err;
