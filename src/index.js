@@ -112,7 +112,7 @@ const transactionRoutes = require('./routes/transactionRoutes');
 const referralRoutes = require('./routes/referralRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
-const { startScheduler, checkSchedulerHealth, generateRound } = require('./src/services/scheduler');
+const { startScheduler, checkSchedulerHealth, generateRound } = require('./services/scheduler');
 require('dotenv').config();
 
 const app = express();
