@@ -99,6 +99,7 @@
 
 // module.exports = app;
 
+// server.js
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -111,12 +112,12 @@ const transactionRoutes = require('./routes/transactionRoutes');
 const referralRoutes = require('./routes/referralRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
-const { startScheduler } = require('./services/scheduler'); // Add scheduler
+const { startScheduler, checkSchedulerHealth, generateRound } = require('./src/services/scheduler');
 require('dotenv').config();
 
 const app = express();
 
-// Enable trust proxy to handle X-Forwarded-For header
+// Enable trust proxy
 app.set('trust proxy', 1);
 
 // CORS configuration
@@ -149,28 +150,68 @@ app.get('/', (req, res) => {
   res.json({ message: 'Betflix Backend API is running' });
 });
 
+// Health check for scheduler
+app.get('/api/scheduler/health', async (req, res) => {
+  try {
+    const health = await checkSchedulerHealth();
+    res.json(health);
+  } catch (err) {
+    console.error('Health check error:', {
+      message: err.message,
+      stack: err.stack,
+    });
+    res.status(500).json({ error: 'Health check failed', details: err.message });
+  }
+});
+
+// HTTP endpoint for round generation (Vercel fallback)
+app.post('/api/scheduler/generate-round', async (req, res) => {
+  const { period } = req.body;
+  if (!/^round-\d+$/.test(period)) {
+    return res.status(400).json({ error: 'Invalid period format' });
+  }
+  try {
+    const round = await generateRound(period);
+    res.json(round);
+  } catch (err) {
+    console.error('Generate round error:', {
+      message: err.message,
+      stack: err.stack,
+      method: req.method,
+      url: req.url,
+      body: req.body,
+    });
+    res.status(500).json({ error: 'Failed to generate round', details: err.message });
+  }
+});
+
 // Rate-limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 100,
   message: { error: 'Too many requests, please try again later.' },
-  keyGenerator: (req) => {
-    return req.ip; // Use req.ip, which respects the trust proxy setting
-  },
+  keyGenerator: (req) => req.ip,
 });
 app.use(limiter);
 
 // Connect to MongoDB
 mongoose
-  .connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('Connected to MongoDB');
-    startScheduler(); // Start the scheduler after MongoDB connection
+    try {
+      startScheduler();
+    } catch (err) {
+      console.error('Failed to start scheduler:', {
+        message: err.message,
+        stack: err.stack,
+      });
+    }
   })
-  .catch((err) => console.error('MongoDB connection error:', err));
+  .catch((err) => console.error('MongoDB connection error:', {
+    message: err.message,
+    stack: err.stack,
+  }));
 
 // MongoDB reconnection logic
 mongoose.connection.on('error', (err) => {
@@ -178,7 +219,7 @@ mongoose.connection.on('error', (err) => {
 });
 mongoose.connection.on('disconnected', () => {
   console.log('MongoDB disconnected, reconnecting...');
-  mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+  mongoose.connect(process.env.MONGODB_URI);
 });
 
 // Routes
