@@ -1,3 +1,104 @@
+// const express = require('express');
+// const mongoose = require('mongoose');
+// const cors = require('cors');
+// const helmet = require('helmet');
+// const rateLimit = require('express-rate-limit');
+// const authRoutes = require('./routes/authRoutes');
+// const userRoutes = require('./routes/userRoutes');
+// const betRoutes = require('./routes/betRoutes');
+// const transactionRoutes = require('./routes/transactionRoutes');
+// const referralRoutes = require('./routes/referralRoutes');
+// const adminRoutes = require('./routes/adminRoutes');
+// const analyticsRoutes  = require('./routes/analyticsRoutes');
+// require('dotenv').config();
+
+// const app = express();
+
+// // Enable trust proxy to handle X-Forwarded-For header
+// app.set('trust proxy', 1);
+
+// // CORS configuration
+// const allowedOrigins = [
+//   'https://betflix-one.vercel.app',
+//   'http://localhost:3000',
+//   'https://admin-betflix.vercel.app',
+//   'http://localhost:3001',
+// ];
+
+// app.use(cors({
+//   origin: (origin, callback) => {
+//     if (!origin || allowedOrigins.includes(origin)) {
+//       callback(null, true);
+//     } else {
+//       callback(new Error('Not allowed by CORS'));
+//     }
+//   },
+//   methods: ['GET', 'POST', 'PUT', 'DELETE'],
+//   allowedHeaders: ['Content-Type', 'Authorization'],
+//   credentials: true,
+// }));
+
+// // Middleware
+// app.use(helmet());
+// app.use(express.json());
+
+// // Root path handler
+// app.get('/', (req, res) => {
+//   res.json({ message: 'Betflix Backend API is running' });
+// });
+
+// // Rate-limiting
+// const limiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutes
+//   max: 100,
+//   message: { error: 'Too many requests, please try again later.' },
+//    keyGenerator: (req) => {
+//     return req.ip; // Use req.ip, which respects the trust proxy setting
+//   },
+// });
+// app.use(limiter);
+
+// // Connect to MongoDB
+// mongoose
+//   .connect(process.env.MONGODB_URI, {
+//     useNewUrlParser: true,
+//     useUnifiedTopology: true,
+//   })
+//   .then(() => console.log('Connected to MongoDB'))
+//   .catch((err) => console.error('MongoDB connection error:', err));
+
+// // MongoDB reconnection logic
+// mongoose.connection.on('error', (err) => {
+//   console.error('MongoDB error:', err);
+// });
+// mongoose.connection.on('disconnected', () => {
+//   console.log('MongoDB disconnected, reconnecting...');
+//   mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+// });
+
+// // Routes
+// app.use('/api/auth', authRoutes);
+// app.use('/api/user', userRoutes);
+// app.use('/api/bets', betRoutes);
+// app.use('/api/transactions', transactionRoutes);
+// app.use('/api/referral', referralRoutes);
+// app.use('/api/admin', adminRoutes);
+// app.use('/api/analytics', analyticsRoutes); 
+
+// // Error handling
+// app.use((err, req, res, next) => {
+//   console.error('Server error:', {
+//     message: err.message,
+//     stack: err.stack,
+//     method: req.method,
+//     url: req.url,
+//     body: req.body,
+//   });
+//   res.status(500).json({ error: 'Something went wrong!', details: err.message });
+// });
+
+// module.exports = app;
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -9,7 +110,8 @@ const betRoutes = require('./routes/betRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const referralRoutes = require('./routes/referralRoutes');
 const adminRoutes = require('./routes/adminRoutes');
-const analyticsRoutes  = require('./routes/analyticsRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
+const { startScheduler } = require('./services/scheduler'); // Add scheduler
 require('dotenv').config();
 
 const app = express();
@@ -52,7 +154,7 @@ const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
   message: { error: 'Too many requests, please try again later.' },
-   keyGenerator: (req) => {
+  keyGenerator: (req) => {
     return req.ip; // Use req.ip, which respects the trust proxy setting
   },
 });
@@ -64,7 +166,10 @@ mongoose
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
-  .then(() => console.log('Connected to MongoDB'))
+  .then(() => {
+    console.log('Connected to MongoDB');
+    startScheduler(); // Start the scheduler after MongoDB connection
+  })
   .catch((err) => console.error('MongoDB connection error:', err));
 
 // MongoDB reconnection logic
@@ -83,7 +188,7 @@ app.use('/api/bets', betRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/referral', referralRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/analytics', analyticsRoutes); 
+app.use('/api/analytics', analyticsRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {
