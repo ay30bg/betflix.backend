@@ -150,7 +150,7 @@ app.get('/', (req, res) => {
   res.json({ message: 'Betflix Backend API is running' });
 });
 
-// Health check for scheduler
+// Health check
 app.get('/api/scheduler/health', async (req, res) => {
   try {
     const health = await checkSchedulerHealth();
@@ -164,7 +164,7 @@ app.get('/api/scheduler/health', async (req, res) => {
   }
 });
 
-// HTTP endpoint for round generation (Vercel fallback)
+// HTTP endpoint for round generation (Vercel)
 app.post('/api/scheduler/generate-round', async (req, res) => {
   const { period } = req.body;
   if (!/^round-\d+$/.test(period)) {
