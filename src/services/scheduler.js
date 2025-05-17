@@ -1,54 +1,64 @@
 // src/services/scheduler.js
 const cron = require('node-cron');
-const mongoose = require('mongoose'); // For connection status
-const Round = require('../models/Round'); // Verify path
+const mongoose = require('mongoose');
+const Round = require('../models/Round'); // Adjust path if needed
 const crypto = require('crypto');
 
 async function generateRound(period) {
   console.log(`Attempting to generate round for ${period}, MongoDB connected: ${mongoose.connection.readyState === 1}`);
-  try {
-    const existingRound = await Round.findOne({ period });
-    if (existingRound) {
-      console.log(`Round already exists for ${period}:`, existingRound.period);
-      return existingRound;
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const existingRound = await Round.findOne({ period });
+      if (existingRound) {
+        console.log(`Round already exists for ${period}:`, existingRound.period);
+        return existingRound;
+      }
+
+      const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
+      const combined = `${serverSeed}-${period}`;
+      const hash = crypto.createHash('sha256').update(combined).digest('hex');
+      const resultNumber = parseInt(hash.slice(0, 8), 16) % 10;
+      const resultColor = resultNumber % 2 === 0 ? 'Green' : 'Red';
+
+      const round = new Round({
+        period,
+        resultNumber,
+        resultColor,
+        serverSeed,
+        createdAt: new Date(parseInt(period.split('-')[1])),
+        expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
+        isManuallySet: false,
+        updatedAt: new Date(),
+      });
+
+      const savedRound = await Round.findOneAndUpdate(
+        { period },
+        { $setOnInsert: round },
+        { upsert: true, new: true }
+      );
+
+      console.log(`Generated round for ${period}:`, {
+        period: savedRound.period,
+        resultNumber: savedRound.resultNumber,
+        resultColor: savedRound.resultColor,
+        createdAt: savedRound.createdAt,
+        expiresAt: savedRound.expiresAt,
+      });
+      return savedRound;
+    } catch (err) {
+      console.error(`Attempt ${attempt} failed for ${period}:`, {
+        message: err.message,
+        stack: err.stack,
+        mongoConnected: mongoose.connection.readyState === 1,
+      });
+      if (err.code === 11000 && attempt < maxRetries) {
+        console.log(`Duplicate key error, retrying (${attempt + 1}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
+      }
+      throw err;
     }
-
-    const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
-    const combined = `${serverSeed}-${period}`;
-    const hash = crypto.createHash('sha256').update(combined).digest('hex');
-    const resultNumber = parseInt(hash.slice(0, 8), 16) % 10;
-    const resultColor = resultNumber % 2 === 0 ? 'Green' : 'Red';
-
-    const round = new Round({
-      period,
-      resultNumber,
-      resultColor,
-      createdAt: new Date(parseInt(period.split('-')[1])),
-      expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
-      serverSeed,
-      isManuallySet: false,
-    });
-
-    const savedRound = await Round.findOneAndUpdate(
-      { period },
-      { $setOnInsert: round },
-      { upsert: true, new: true }
-    );
-
-    console.log(`Generated round for ${period}:`, {
-      resultNumber: savedRound.resultNumber,
-      resultColor: savedRound.resultColor,
-      createdAt: savedRound.createdAt,
-      expiresAt: savedRound.expiresAt,
-    });
-    return savedRound;
-  } catch (err) {
-    console.error(`Error generating round for ${period}:`, {
-      message: err.message,
-      stack: err.stack,
-      mongoConnected: mongoose.connection.readyState === 1,
-    });
-    throw err;
   }
 }
 
@@ -114,7 +124,6 @@ function startScheduler() {
   console.log('Round generation scheduler started at', new Date().toISOString());
 }
 
-// Health check
 async function checkSchedulerHealth() {
   try {
     const latestRound = await Round.findOne().sort({ createdAt: -1 });
@@ -141,7 +150,6 @@ async function checkSchedulerHealth() {
   }
 }
 
-// Test function to diagnose issues
 async function testScheduler() {
   console.log('Running scheduler test...');
   try {
