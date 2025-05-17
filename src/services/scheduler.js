@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const Round = require('../models/Round'); // Path to your Round model
+const Round = require('./models/Round'); // Path to your Round model
 const crypto = require('crypto');
 
 // Function to generate a round for a given period
