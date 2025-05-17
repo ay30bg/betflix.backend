@@ -2,6 +2,12 @@
 // const User = require('../models/User');
 // const Round = require('../models/Round');
 // const crypto = require('crypto');
+// const { createRound } = require('../utils/roundUtils');
+
+// const PAYOUT_MULTIPLIERS = {
+//   color: 1.9,
+//   number: 6.8,
+// };
 
 // exports.getBetHistory = async (req, res) => {
 //   try {
@@ -10,7 +16,7 @@
 //       .limit(10);
 //     res.json(bets);
 //   } catch (err) {
-//     console.error('Error in getBetHistory:', err.message, err.stack);
+//     console.error(`[${new Date().toISOString()}] Error in getBetHistory:`, err.message, err.stack);
 //     res.status(500).json({ error: 'Server error', details: err.message });
 //   }
 // };
@@ -23,7 +29,7 @@
 //     const losses = totalBets - wins;
 //     res.json({ totalBets, wins, losses });
 //   } catch (err) {
-//     console.error('Error in getBetStats:', err.message, err.stack);
+//     console.error(`[${new Date().toISOString()}] Error in getBetStats:`, err.message, err.stack);
 //     res.status(500).json({ error: 'Server error', details: err.message });
 //   }
 // };
@@ -31,215 +37,115 @@
 // exports.placeBet = async (req, res) => {
 //   try {
 //     const { type, value, amount, clientSeed } = req.body;
-//     console.log('Received bet:', { userId: req.user.id, type, value, amount, clientSeed });
+//     console.log(`[${new Date().toISOString()}] Received bet:`, { userId: req.user.id, type, value, amount, clientSeed });
 
 //     const user = await User.findById(req.user.id);
 //     if (!user) {
-//       console.error('User not found:', req.user.id);
+//       console.error(`[${new Date().toISOString()}] User not found: ${req.user.id}`);
 //       return res.status(404).json({ error: 'User not found' });
 //     }
-//     console.log('User balance:', user.balance);
 
 //     if (!Number.isFinite(amount) || amount <= 0) {
-//       console.error('Invalid bet amount:', amount);
+//       console.error(`[${new Date().toISOString()}] Invalid bet amount: ${amount}`);
 //       return res.status(400).json({ error: 'Invalid bet amount' });
 //     }
 
 //     if (amount > user.balance) {
-//       console.error('Insufficient balance:', { amount, balance: user.balance });
+//       console.error(`[${new Date().toISOString()}] Insufficient balance: ${amount} > ${user.balance}`);
 //       return res.status(400).json({ error: 'Insufficient balance' });
 //     }
 
 //     if (!clientSeed || typeof clientSeed !== 'string') {
-//       console.error('Invalid clientSeed:', clientSeed);
+//       console.error(`[${new Date().toISOString()}] Invalid clientSeed: ${clientSeed}`);
 //       return res.status(400).json({ error: 'Invalid clientSeed' });
 //     }
 
 //     if (!['color', 'number'].includes(type)) {
-//       console.error('Invalid bet type:', type);
+//       console.error(`[${new Date().toISOString()}] Invalid bet type: ${type}`);
 //       return res.status(400).json({ error: 'Invalid bet type' });
 //     }
 
 //     if (type === 'color' && !['Green', 'Red'].includes(value)) {
-//       console.error('Invalid color value:', value);
+//       console.error(`[${new Date().toISOString()}] Invalid color value: ${value}`);
 //       return res.status(400).json({ error: 'Invalid color value' });
 //     }
 
 //     if (type === 'number' && !/^\d$/.test(value)) {
-//       console.error('Invalid number value:', value);
+//       console.error(`[${new Date().toISOString()}] Invalid number value: ${value}`);
 //       return res.status(400).json({ error: 'Invalid number value' });
 //     }
 
-//     const roundDuration = 120 * 1000; // 2 minutes
+//     const roundDuration = 120 * 1000;
 //     const now = Date.now();
 //     const roundStart = Math.floor(now / roundDuration) * roundDuration;
 //     const roundEnd = roundStart + roundDuration;
 //     const period = `round-${roundStart}`;
-//     console.log('Round details:', { period, roundStart, roundEnd });
+//     console.log(`[${new Date().toISOString()}] Round details:`, { period, roundStart, roundEnd });
 
 //     if (now > roundEnd - 10000) {
-//       console.error('Round ending soon:', { now, roundEnd });
+//       console.error(`[${new Date().toISOString()}] Round ending soon: now=${now}, roundEnd=${roundEnd}`);
 //       return res.status(400).json({ error: 'Round is about to end, please wait for the next round' });
 //     }
 
+//     await createRound(period); // Use pre-generated or create
+
 //     const existingBet = await Bet.findOne({ userId: req.user.id, period });
 //     if (existingBet) {
-//       console.error('Duplicate bet detected:', { userId: req.user.id, period });
+//       console.error(`[${new Date().toISOString()}] Duplicate bet detected: userId=${req.user.id}, period=${period}`);
 //       return res.status(400).json({ error: `Only one bet allowed per round (${period})` });
 //     }
 
-//     const newBalance = user.balance - amount;
-//     console.log('Updating balance:', { oldBalance: user.balance, newBalance });
-//     await User.findByIdAndUpdate(req.user.id, { balance: newBalance, updatedAt: new Date() });
+//     const session = await Bet.startSession();
+//     session.startTransaction();
+//     try {
+//       const newBalance = user.balance - amount;
+//       await User.findByIdAndUpdate(
+//         req.user.id,
+//         { balance: newBalance, updatedAt: new Date() },
+//         { session }
+//       );
 
-//     const bet = new Bet({
-//       userId: req.user.id,
-//       period,
-//       type,
-//       value,
-//       amount,
-//       clientSeed,
-//       createdAt: new Date(),
-//     });
-//     console.log('Saving bet:', bet);
-//     await bet.save();
+//       const bet = new Bet({
+//         userId: req.user.id,
+//         period,
+//         type,
+//         value,
+//         amount,
+//         clientSeed,
+//         createdAt: new Date(),
+//       });
+//       await bet.save({ session });
 
-//     res.json({ bet, balance: newBalance });
+//       await session.commitTransaction();
+//       res.json({ bet, balance: newBalance });
+//     } catch (err) {
+//       await session.abortTransaction();
+//       throw err;
+//     } finally {
+//       session.endSession();
+//     }
 //   } catch (err) {
-//     console.error('Error in placeBet:', err.message, err.stack);
+//     console.error(`[${new Date().toISOString()}] Error in placeBet:`, err.message, err.stack);
 //     res.status(500).json({ error: 'Server error', details: err.message });
 //   }
-// };
-
-// // exports.getBetResult = async (req, res) => {
-// //   try {
-// //     const { period } = req.params;
-// //     const userId = req.user.id;
-// //     console.log('Fetching bet result:', { period, userId });
-
-// //     if (!/^round-\d+$/.test(period)) {
-// //       console.error('Invalid period format:', period);
-// //       return res.status(400).json({ error: 'Invalid period format' });
-// //     }
-
-// //     const bet = await Bet.findOne({ userId, period });
-// //     if (!bet) {
-// //       console.error('Bet not found:', { userId, period });
-// //       return res.status(404).json({ error: 'Bet not found for this round' });
-// //     }
-
-// //     if (bet.result && bet.won !== undefined) {
-// //       console.log('Returning existing bet result:', bet);
-// //       return res.json({ bet });
-// //     }
-
-// //     let round = await Round.findOne({ period });
-// //     if (!round) {
-// //       console.log('Creating new round for period:', period);
-// //       const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
-// //       const combined = `${serverSeed}-${period}`;
-// //       const hash = crypto.createHash('sha256').update(combined).digest('hex');
-// //       const resultNumber = parseInt(hash.slice(0, 8), 16) % 10;
-// //       const resultColor = resultNumber % 2 === 0 ? 'Green' : 'Red';
-
-// //       round = new Round({
-// //         period,
-// //         resultNumber,
-// //         resultColor,
-// //         createdAt: new Date(parseInt(period.split('-')[1])),
-// //         expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
-// //         serverSeed,
-// //       });
-
-// //       const existingRound = await Round.findOneAndUpdate(
-// //         { period },
-// //         { $setOnInsert: round },
-// //         { upsert: true, new: true }
-// //       );
-// //       round = existingRound;
-// //       console.log('Round saved:', { period, resultNumber, resultColor });
-// //     }
-
-// //     const gracePeriod = 10000; // 10 seconds
-// //     if (round.expiresAt < new Date() - gracePeriod) {
-// //       console.error('Round expired beyond grace period:', {
-// //         period,
-// //         expiresAt: round.expiresAt,
-// //         currentTime: new Date(),
-// //         gracePeriod,
-// //       });
-// //       return res.status(400).json({ error: 'Round has expired' });
-// //     }
-// //     console.log('Round still valid or within grace period:', {
-// //       period,
-// //       expiresAt: round.expiresAt,
-// //       currentTime: new Date(),
-// //       gracePeriod,
-// //     });
-
-// //     const { resultNumber, resultColor } = round;
-
-// //     let won = false;
-// //     let payout = 0;
-
-// //     if (bet.type === 'color') {
-// //       won = bet.value === resultColor;
-// //       payout = won ? bet.amount * 1.9 : 0; // Updated to 1.9x for color bets
-// //     } else if (bet.type === 'number') {
-// //       if (bet.value == resultNumber) {
-// //         won = true;
-// //         payout = bet.amount * 6.8; // Updated to 6.8x for number bets
-// //       } else {
-// //         won = false;
-// //         payout = 0; // Number bet loses if exact number isn't matched
-// //       }
-// //     }
-
-// //     console.log('Bet result calculated:', { won, payout, resultNumber, resultColor });
-
-// //     bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
-// //     bet.won = won;
-// //     bet.payout = payout;
-// //     await bet.save();
-
-// //     const user = await User.findById(userId);
-// //     if (!user) {
-// //       console.error('User not found during balance update:', userId);
-// //       return res.status(404).json({ error: 'User not found' });
-// //     }
-// //     const newBalance = Math.max(user.balance + payout, 0);
-// //     console.log('Updating balance:', { oldBalance: user.balance, payout, newBalance });
-// //     await User.findByIdAndUpdate(userId, { balance: newBalance, updatedAt: new Date() });
-
-// //     res.json({ bet, balance: newBalance });
-// //   } catch (err) {
-// //     console.error('Error in getBetResult:', err.message, err.stack);
-// //     res.status(500).json({ error: 'Server error', details: err.message });
-// //   }
-// // };
-
-// const PAYOUT_MULTIPLIERS = {
-//   color: 1.9,
-//   number: 6.8,
 // };
 
 // exports.getBetResult = async (req, res) => {
 //   try {
 //     const { period } = req.params;
 //     const userId = req.user.id;
-//     const roundDuration = 120 * 1000; // 2 minutes, same as getCurrentRound
-//     console.log('Fetching bet result:', { period });
+//     const roundDuration = 120 * 1000;
+//     console.log(`[${new Date().toISOString()}] Fetching bet result:`, { period });
 
-//     // Validate period format: must be round-<timestamp> where timestamp is divisible by roundDuration
 //     const periodMatch = period.match(/^round-(\d+)$/);
 //     if (!periodMatch) {
-//       console.error('Invalid period format:', period);
+//       console.error(`[${new Date().toISOString()}] Invalid period format: ${period}`);
 //       return res.status(400).json({ error: 'Invalid period format. Expected round-<timestamp>' });
 //     }
 
 //     const timestamp = parseInt(periodMatch[1]);
 //     if (timestamp % roundDuration !== 0) {
-//       console.error('Invalid period timestamp: not aligned with round duration:', period);
+//       console.error(`[${new Date().toISOString()}] Invalid period timestamp: not aligned with round duration: ${period}`);
 //       return res.status(400).json({
 //         error: 'Invalid period timestamp. Must be aligned with 2-minute round duration',
 //       });
@@ -247,7 +153,7 @@
 
 //     const bet = await Bet.findOne({ userId, period });
 //     if (!bet) {
-//       console.error('Bet not found:', { userId, period });
+//       console.error(`[${new Date().toISOString()}] Bet not found:`, { userId, period });
 //       return res.status(404).json({ error: 'Bet not found for this round' });
 //     }
 
@@ -264,37 +170,16 @@
 //     }
 
 //     if (bet.result && bet.won !== undefined) {
-//       console.log('Returning existing bet result:', bet);
+//       console.log(`[${new Date().toISOString()}] Returning existing bet result:`, bet);
 //       return res.json({ bet });
 //     }
 
 //     let round = await Round.findOne({ period });
 //     if (!round) {
-//       const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
-//       const combined = `${serverSeed}-${period}`;
-//       const hash = crypto.createHash('sha256').update(combined).digest('hex');
-//       const resultNumber = parseInt(hash.slice(0, 8), 16) % 10;
-//       const resultColor = resultNumber % 2 === 0 ? 'Green' : 'Red';
-
-//       round = new Round({
-//         period,
-//         resultNumber,
-//         resultColor,
-//         createdAt: new Date(timestamp),
-//         expiresAt: new Date(timestamp + roundDuration),
-//         serverSeed,
-//         isManuallySet: false,
-//       });
-
-//       const existingRound = await Round.findOneAndUpdate(
-//         { period },
-//         { $setOnInsert: round },
-//         { upsert: true, new: true }
-//       );
-//       round = existingRound;
-//       console.log('Round created:', { period, resultNumber, resultColor, isManuallySet: false });
+//       round = await createRound(period);
+//       console.log(`[${new Date().toISOString()}] Round created:`, { period, resultNumber: round.resultNumber, resultColor: round.resultColor });
 //     } else {
-//       console.log('Using existing round:', {
+//       console.log(`[${new Date().toISOString()}] Using existing round:`, {
 //         period,
 //         resultNumber: round.resultNumber,
 //         resultColor: round.resultColor,
@@ -302,9 +187,9 @@
 //       });
 //     }
 
-//     const gracePeriod = 10000; // 10 seconds
+//     const gracePeriod = 10000;
 //     if (round.expiresAt < new Date(Date.now() - gracePeriod)) {
-//       console.error('Round expired beyond grace period:', {
+//       console.error(`[${new Date().toISOString()}] Round expired beyond grace period:`, {
 //         period,
 //         expiresAt: round.expiresAt,
 //         currentTime: new Date(),
@@ -328,7 +213,7 @@
 //       }
 //     }
 
-//     console.log('Bet result calculated:', {
+//     console.log(`[${new Date().toISOString()}] Bet result calculated:`, {
 //       won,
 //       payout,
 //       resultNumber,
@@ -339,19 +224,16 @@
 //     const session = await Bet.startSession();
 //     session.startTransaction();
 //     try {
-//       // Save bet updates
 //       bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
 //       bet.won = won;
 //       bet.payout = payout;
 //       await bet.save({ session });
 
-//       // Fetch user to get current balance
 //       const user = await User.findById(userId).session(session);
 //       if (!user) {
 //         throw new Error('User not found');
 //       }
 
-//       // Update user balance
 //       const newBalance = Math.max(user.balance + payout, 0);
 //       await User.findByIdAndUpdate(
 //         userId,
@@ -368,21 +250,21 @@
 //       session.endSession();
 //     }
 //   } catch (err) {
-//     console.error('Error in getBetResult:', err.message, err.stack);
+//     console.error(`[${new Date().toISOString()}] Error in getBetResult:`, err.message, err.stack);
 //     res.status(500).json({ error: 'Server error' });
 //   }
 // };
 
 // exports.getCurrentRound = async (req, res) => {
 //   try {
-//     const roundDuration = 120 * 1000; // 2 minutes
+//     const roundDuration = 120 * 1000;
 //     const now = Date.now();
 //     const roundStart = Math.floor(now / roundDuration) * roundDuration;
 //     const period = `round-${roundStart}`;
 //     const expiresAt = new Date(roundStart + roundDuration).toISOString();
-//     console.log('getCurrentRound:', { now, period, expiresAt });
+//     console.log(`[${new Date().toISOString()}] getCurrentRound:`, { now, period, expiresAt });
 
-//     const round = await Round.findOne({ period });
+//     const round = await createRound(period);
 
 //     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 //     res.set('Pragma', 'no-cache');
@@ -395,106 +277,44 @@
 //       result: round ? { resultNumber: round.resultNumber, resultColor: round.resultColor } : null,
 //     });
 //   } catch (err) {
-//     console.error('Error in getCurrentRound:', err.message, err.stack);
+//     console.error(`[${new Date().toISOString()}] Error in getCurrentRound:`, err.message, err.stack);
 //     res.status(500).json({ error: 'Server error', details: err.message });
 //   }
 // };
 
-// // exports.preGenerateRound = async (req, res) => {
-// //   try {
-// //     const { period } = req.body;
-// //     if (!/^round-\d+$/.test(period)) {
-// //       console.error('Invalid period format in preGenerateRound:', period);
-// //       return res.status(400).json({ error: 'Invalid period format' });
-// //     }
-
-// //     const existingRound = await Round.findOne({ period });
-// //     if (existingRound) {
-// //       console.log('Round already exists:', existingRound);
-// //       return res.json(existingRound);
-// //     }
-
-// //     const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
-// //     const combined = `${serverSeed}-${period}`;
-// //     const hash = crypto.createHash('sha256').update(combined).digest('hex');
-// //     const resultNumber = parseInt(hash.slice(0, 8), 16) % 10;
-// //     const resultColor = resultNumber % 2 === 0 ? 'Green' : 'Red';
-
-// //     const round = new Round({
-// //       period,
-// //       resultNumber,
-// //       resultColor,
-// //       createdAt: new Date(parseInt(period.split('-')[1])),
-// //       expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
-// //       serverSeed,
-// //     });
-
-// //     const savedRound = await Round.findOneAndUpdate(
-// //       { period },
-// //       { $setOnInsert: round },
-// //       { upsert: true, new: true }
-// //     );
-
-// //     console.log('Pre-generated round:', savedRound);
-// //     res.json(savedRound);
-// //   } catch (err) {
-// //     console.error('Error in preGenerateRound:', err.message, err.stack);
-// //     res.status(500).json({ error: 'Server error', details: err.message });
-// //   }
-// // };
-
 // exports.preGenerateRound = async (req, res) => {
 //   try {
 //     const { period } = req.body;
-//     console.log('preGenerateRound called with:', { period, user: req.user?.id });
+//     console.log(`[${new Date().toISOString()}] preGenerateRound called with:`, { period, user: req.user?.id });
 
 //     if (!/^round-\d+$/.test(period)) {
-//       console.error('Invalid period format in preGenerateRound:', period);
+//       console.error(`[${new Date().toISOString()}] Invalid period format in preGenerateRound: ${period}`);
 //       return res.status(400).json({ error: 'Invalid period format' });
 //     }
 
-//     const existingRound = await Round.findOne({ period });
-//     console.log('Existing round check:', { period, found: !!existingRound });
-//     if (existingRound) {
-//       console.log('Round already exists:', existingRound);
-//       return res.json(existingRound);
-//     }
+//     const round = await createRound(period);
+//     console.log(`[${new Date().toISOString()}] Round saved to DB:`, round);
 
-//     const serverSeed = crypto.createHash('sha256').update(period).digest('hex');
-//     const combined = `${serverSeed}-${period}`;
-//     const hash = crypto.createHash('sha256').update(combined).digest('hex');
-//     const resultNumber = parseInt(hash.slice(0, 8), 16) % 10;
-//     const resultColor = resultNumber % 2 === 0 ? 'Green' : 'Red';
-
-//     const round = new Round({
-//       period,
-//       resultNumber,
-//       resultColor,
-//       createdAt: new Date(parseInt(period.split('-')[1])),
-//       expiresAt: new Date(parseInt(period.split('-')[1]) + 120 * 1000),
-//       serverSeed,
-//     });
-//     console.log('New round created:', round);
-
-//     const savedRound = await Round.findOneAndUpdate(
-//       { period },
-//       { $setOnInsert: round },
-//       { upsert: true, new: true }
-//     );
-//     console.log('Round saved to DB:', savedRound);
-
-//     // Verify the document exists in the database
-//     const verifyRound = await Round.findOne({ period });
-//     console.log('Verification check:', { period, found: !!verifyRound, document: verifyRound });
-
-//     res.json(savedRound);
+//     res.json(round);
 //   } catch (err) {
-//     console.error('Error in preGenerateRound:', {
+//     console.error(`[${new Date().toISOString()}] Error in preGenerateRound:`, {
 //       message: err.message,
 //       stack: err.stack,
 //       code: err.code,
-//       name: err.name
+//       name: err.name,
 //     });
+//     res.status(500).json({ error: 'Server error', details: err.message });
+//   }
+// };
+
+// exports.triggerPreGenerateRounds = async (req, res) => {
+//   try {
+//     const { preGenerateRoundsFor24Hours } = require('../services/scheduler');
+//     const result = await preGenerateRoundsFor24Hours();
+//     console.log(`[${new Date().toISOString()}] Manual pre-generation triggered:`, result);
+//     res.json(result);
+//   } catch (err) {
+//     console.error(`[${new Date().toISOString()}] Error in triggerPreGenerateRounds:`, err.message, err.stack);
 //     res.status(500).json({ error: 'Server error', details: err.message });
 //   }
 // };
@@ -509,10 +329,10 @@
 //         { period: { $exists: false } },
 //       ],
 //     });
-//     console.log('Cleaned up invalid bets:', result);
+//     console.log(`[${new Date().toISOString()}] Cleaned up invalid bets:`, result);
 //     res.json(result);
 //   } catch (err) {
-//     console.error('Error in cleanupInvalidBets:', err.message, err.stack);
+//     console.error(`[${new Date().toISOString()}] Error in cleanupInvalidBets:`, err.message, err.stack);
 //     res.status(500).json({ error: 'Server error', details: err.message });
 //   }
 // };
@@ -523,25 +343,26 @@
 //     const { resultNumber, resultColor } = req.body;
 
 //     if (!/^round-\d+$/.test(period)) {
-//       console.error('Invalid period format:', period);
+//       console.error(`[${new Date().toISOString()}] Invalid period format: ${period}`);
 //       return res.status(400).json({ error: 'Invalid period format' });
 //     }
 
 //     const round = await Round.findOne({ period });
 //     if (!round) {
-//       console.error('Round not found:', period);
+//       console.error(`[${new Date().toISOString()}] Round not found: ${period}`);
 //       return res.status(404).json({ error: 'Round not found' });
 //     }
 
 //     round.resultNumber = resultNumber;
 //     round.resultColor = resultColor;
 //     round.updatedAt = new Date();
+//     round.isManuallySet = true;
 
 //     await round.save();
-//     console.log('Round outcome updated:', { period, resultNumber, resultColor });
+//     console.log(`[${new Date().toISOString()}] Round outcome updated:`, { period, resultNumber, resultColor });
 //     res.json(round);
 //   } catch (err) {
-//     console.error('Error in setRoundOutcome:', err.message, err.stack);
+//     console.error(`[${new Date().toISOString()}] Error in setRoundOutcome:`, err.message, err.stack);
 //     res.status(500).json({ error: 'Server error', details: err.message });
 //   }
 // };
@@ -549,16 +370,16 @@
 // exports.getRoundResult = async (req, res) => {
 //   try {
 //     const { period } = req.params;
-//     console.log('Fetching round result:', { period, adminId: req.admin.id });
+//     console.log(`[${new Date().toISOString()}] Fetching round result:`, { period, adminId: req.admin?.id });
 
 //     if (!/^round-\d+$/.test(period)) {
-//       console.error('Invalid period format:', period);
+//       console.error(`[${new Date().toISOString()}] Invalid period format: ${period}`);
 //       return res.status(400).json({ error: 'Invalid period format' });
 //     }
 
 //     const round = await Round.findOne({ period });
 //     if (!round) {
-//       console.error('Round not found:', { period });
+//       console.error(`[${new Date().toISOString()}] Round not found: ${period}`);
 //       return res.status(404).json({ error: 'Round not found' });
 //     }
 
@@ -572,20 +393,18 @@
 //       expiresAt: round.expiresAt,
 //     });
 //   } catch (err) {
-//     console.error('Error in getRoundResult:', err.message, err.stack);
+//     console.error(`[${new Date().toISOString()}] Error in getRoundResult:`, err.message, err.stack);
 //     res.status(500).json({ error: 'Server error', details: err.message });
 //   }
 // };
 
 // exports.getAllRounds = async (req, res) => {
 //   try {
-//     // Fetch all rounds, sorted by createdAt in descending order, limited to 100
 //     const rounds = await Round.find()
 //       .sort({ createdAt: -1 })
 //       .limit(100)
 //       .select('period resultNumber resultColor');
 
-//     // Map rounds to the required format for frontend
 //     const formattedRounds = rounds.map((round) => ({
 //       period: round.period,
 //       result: {
@@ -594,13 +413,25 @@
 //       },
 //     }));
 
-//     console.log('Fetched all rounds:', { count: formattedRounds.length });
+//     console.log(`[${new Date().toISOString()}] Fetched all rounds:`, { count: formattedRounds.length });
 //     res.json(formattedRounds);
 //   } catch (err) {
-//     console.error('Error in getAllRounds:', err.message, err.stack);
+//     console.error(`[${new Date().toISOString()}] Error in getAllRounds:`, err.message, err.stack);
 //     res.status(500).json({ error: 'Server error', details: err.message });
 //   }
 // };
+
+// exports.getSchedulerHealth = async (req, res) => {
+//   try {
+//     const { checkSchedulerHealth } = require('../services/scheduler');
+//     const health = await checkSchedulerHealth();
+//     res.json(health);
+//   } catch (err) {
+//     console.error(`[${new Date().toISOString()}] Error in getSchedulerHealth:`, err.message, err.stack);
+//     res.status(500).json({ error: 'Server error', details: err.message });
+//   }
+// };
+
 
 const Bet = require('../models/Bet');
 const User = require('../models/User');
@@ -628,10 +459,10 @@ exports.getBetHistory = async (req, res) => {
 exports.getBetStats = async (req, res) => {
   try {
     const bets = await Bet.find({ userId: req.user.id });
-    const totalBets = bets.length;
+    const totalTxn = bets.length;
     const wins = bets.filter((bet) => bet.won).length;
-    const losses = totalBets - wins;
-    res.json({ totalBets, wins, losses });
+    const losses = totalTxn - wins;
+    res.json({ totalTxn, wins, losses });
   } catch (err) {
     console.error(`[${new Date().toISOString()}] Error in getBetStats:`, err.message, err.stack);
     res.status(500).json({ error: 'Server error', details: err.message });
@@ -691,7 +522,7 @@ exports.placeBet = async (req, res) => {
       return res.status(400).json({ error: 'Round is about to end, please wait for the next round' });
     }
 
-    await createRound(period); // Use pre-generated or create
+    await createRound(period);
 
     const existingBet = await Bet.findOne({ userId: req.user.id, period });
     if (existingBet) {
@@ -937,6 +768,18 @@ exports.cleanupInvalidBets = async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error(`[${new Date().toISOString()}] Error in cleanupInvalidBets:`, err.message, err.stack);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+};
+
+exports.cleanupExpiredRounds = async (req, res) => {
+  try {
+    const { cleanupExpiredRounds } = require('../services/scheduler');
+    const result = await cleanupExpiredRounds();
+    console.log(`[${new Date().toISOString()}] Manual cleanup of expired rounds triggered:`, result);
+    res.json(result);
+  } catch (err) {
+    console.error(`[${new Date().toISOString()}] Error in cleanupExpiredRounds:`, err.message, err.stack);
     res.status(500).json({ error: 'Server error', details: err.message });
   }
 };
