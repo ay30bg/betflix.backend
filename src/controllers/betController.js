@@ -444,7 +444,7 @@ const User = require('../models/User');
 const Round = require('../models/Round');
 const crypto = require('crypto');
 const { createRound } = require('../utils/roundUtils');
-const cron = require('node-cron'); // Add node-cron for cleanup
+const cron = require('node-cron');
 
 const PAYOUT_MULTIPLIERS = {
   color: 1.9,
@@ -475,7 +475,6 @@ exports.getBetHistory = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(10);
 
-    // Add status and roundExpiresAt to each bet
     const betsWithStatus = await Promise.all(
       bets.map(async (bet) => {
         const round = await Round.findOne({ period: bet.period });
@@ -495,6 +494,139 @@ exports.getBetHistory = async (req, res) => {
   }
 };
 
+exports.getBetResult = async (req, res) => {
+  try {
+    const { period } = req.params;
+    const userId = req.user.id;
+    const roundDuration = 120 * 1000;
+    console.log(`[${new Date().toISOString()}] Fetching bet result:`, { period, userId });
+
+    const periodMatch = period.match(/^round-(\d+)$/);
+    if (!periodMatch) {
+      console.error(`[${new Date().toISOString()}] Invalid period format: ${period}`);
+      return res.status(400).json({ error: 'Invalid period format. Expected round-<timestamp>' });
+    }
+
+    const timestamp = parseInt(periodMatch[1]);
+    if (timestamp % roundDuration !== 0) {
+      console.error(`[${new Date().toISOString()}] Invalid period timestamp: not aligned with round duration: ${period}`);
+      return res.status(400).json({
+        error: 'Invalid period timestamp. Must be aligned with 2-minute round duration',
+      });
+    }
+
+    const bet = await Bet.findOne({ userId, period });
+    if (!bet) {
+      console.error(`[${new Date().toISOString()}] Bet not found:`, { userId, period });
+      return res.status(404).json({ error: 'Bet not found for this round' });
+    }
+
+    const validBetTypes = ['color', 'number'];
+    const validColors = ['Green', 'Red'];
+    if (!validBetTypes.includes(bet.type)) {
+      return res.status(400).json({ error: 'Invalid bet type' });
+    }
+    if (bet.type === 'color' && !validColors.includes(bet.value)) {
+      return res.status(400).json({ error: 'Invalid color value' });
+    }
+    if (bet.type === 'number' && !/^\d$/.test(bet.value)) {
+      return res.status(400).json({ error: 'Invalid number value' });
+    }
+
+    if (bet.result && bet.won !== undefined) {
+      console.log(`[${new Date().toISOString()}] Returning existing bet result:`, bet);
+      return res.json({ bet });
+    }
+
+    let round = await Round.findOne({ period });
+    if (!round) {
+      round = await createRound(period);
+      console.log(`[${new Date().toISOString()}] Round created:`, { period, resultNumber: round.resultNumber, resultColor: round.resultColor });
+    } else {
+      console.log(`[${new Date().toISOString()}] Using existing round:`, {
+        period,
+        resultNumber: round.resultNumber,
+        resultColor: round.resultColor,
+        isManuallySet: round.isManuallySet,
+      });
+    }
+
+    const gracePeriod = 10000;
+    if (round.expiresAt < new Date(Date.now() - gracePeriod)) {
+      console.error(`[${new Date().toISOString()}] Round expired beyond grace period:`, {
+        period,
+        expiresAt: round.expiresAt,
+        currentTime: new Date(),
+        gracePeriod,
+      });
+      return res.status(400).json({ error: 'Round has expired' });
+    }
+
+    const { resultNumber, resultColor } = round;
+
+    let won = false;
+    let payout = 0;
+
+    if (bet.type === 'color') {
+      won = bet.value === resultColor;
+      payout = won ? bet.amount * PAYOUT_MULTIPLIERS.color : 0;
+    } else if (bet.type === 'number') {
+      if (parseInt(bet.value) === resultNumber) {
+        won = true;
+        payout = bet.amount * PAYOUT_MULTIPLIERS.number;
+      }
+    }
+
+    console.log(`[${new Date().toISOString()}] Bet result calculated:`, {
+      won,
+      payout,
+      resultNumber,
+      resultColor,
+      isManuallySet: round.isManuallySet,
+    });
+
+    const session = await Bet.startSession();
+    session.startTransaction();
+    try {
+      bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
+      bet.won = won;
+      bet.payout = payout;
+      await bet.save({ session });
+
+      const user = await User.findById(userId).session(session);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const newBalance = Math.max(user.balance + payout, 0);
+      await User.findByIdAndUpdate(
+        userId,
+        { $set: { balance: newBalance, updatedAt: new Date() } },
+        { session }
+      );
+
+      await session.commitTransaction();
+      console.log(`[${new Date().toISOString()}] Bet updated successfully:`, {
+        period,
+        won,
+        payout,
+        newBalance,
+      });
+      res.json({ bet, balance: newBalance });
+    } catch (err) {
+      await session.abortTransaction();
+      console.error(`[${new Date().toISOString()}] Transaction failed in getBetResult:`, err.message, err.stack);
+      throw err;
+    } finally {
+      session.endSession();
+    }
+  } catch (err) {
+    console.error(`[${new Date().toISOString()}] Error in getBetResult:`, err.message, err.stack);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+};
+
+// Other endpoints unchanged (for brevity, included below as reference)
 exports.getBetStats = async (req, res) => {
   try {
     const bets = await Bet.find({ userId: req.user.id });
@@ -604,131 +736,6 @@ exports.placeBet = async (req, res) => {
   } catch (err) {
     console.error(`[${new Date().toISOString()}] Error in placeBet:`, err.message, err.stack);
     res.status(500).json({ error: 'Server error', details: err.message });
-  }
-};
-
-exports.getBetResult = async (req, res) => {
-  try {
-    const { period } = req.params;
-    const userId = req.user.id;
-    const roundDuration = 120 * 1000;
-    console.log(`[${new Date().toISOString()}] Fetching bet result:`, { period });
-
-    const periodMatch = period.match(/^round-(\d+)$/);
-    if (!periodMatch) {
-      console.error(`[${new Date().toISOString()}] Invalid period format: ${period}`);
-      return res.status(400).json({ error: 'Invalid period format. Expected round-<timestamp>' });
-    }
-
-    const timestamp = parseInt(periodMatch[1]);
-    if (timestamp % roundDuration !== 0) {
-      console.error(`[${new Date().toISOString()}] Invalid period timestamp: not aligned with round duration: ${period}`);
-      return res.status(400).json({
-        error: 'Invalid period timestamp. Must be aligned with 2-minute round duration',
-      });
-    }
-
-    const bet = await Bet.findOne({ userId, period });
-    if (!bet) {
-      console.error(`[${new Date().toISOString()}] Bet not found:`, { userId, period });
-      return res.status(404).json({ error: 'Bet not found for this round' });
-    }
-
-    const validBetTypes = ['color', 'number'];
-    const validColors = ['Green', 'Red'];
-    if (!validBetTypes.includes(bet.type)) {
-      return res.status(400).json({ error: 'Invalid bet type' });
-    }
-    if (bet.type === 'color' && !validColors.includes(bet.value)) {
-      return res.status(400).json({ error: 'Invalid color value' });
-    }
-    if (bet.type === 'number' && !/^\d$/.test(bet.value)) {
-      return res.status(400).json({ error: 'Invalid number value' });
-    }
-
-    if (bet.result && bet.won !== undefined) {
-      console.log(`[${new Date().toISOString()}] Returning existing bet result:`, bet);
-      return res.json({ bet });
-    }
-
-    let round = await Round.findOne({ period });
-    if (!round) {
-      round = await createRound(period);
-      console.log(`[${new Date().toISOString()}] Round created:`, { period, resultNumber: round.resultNumber, resultColor: round.resultColor });
-    } else {
-      console.log(`[${new Date().toISOString()}] Using existing round:`, {
-        period,
-        resultNumber: round.resultNumber,
-        resultColor: round.resultColor,
-        isManuallySet: round.isManuallySet,
-      });
-    }
-
-    const gracePeriod = 10000;
-    if (round.expiresAt < new Date(Date.now() - gracePeriod)) {
-      console.error(`[${new Date().toISOString()}] Round expired beyond grace period:`, {
-        period,
-        expiresAt: round.expiresAt,
-        currentTime: new Date(),
-        gracePeriod,
-      });
-      return res.status(400).json({ error: 'Round has expired' });
-    }
-
-    const { resultNumber, resultColor } = round;
-
-    let won = false;
-    let payout = 0;
-
-    if (bet.type === 'color') {
-      won = bet.value === resultColor;
-      payout = won ? bet.amount * PAYOUT_MULTIPLIERS.color : 0;
-    } else if (bet.type === 'number') {
-      if (parseInt(bet.value) === resultNumber) {
-        won = true;
-        payout = bet.amount * PAYOUT_MULTIPLIERS.number;
-      }
-    }
-
-    console.log(`[${new Date().toISOString()}] Bet result calculated:`, {
-      won,
-      payout,
-      resultNumber,
-      resultColor,
-      isManuallySet: round.isManuallySet,
-    });
-
-    const session = await Bet.startSession();
-    session.startTransaction();
-    try {
-      bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
-      bet.won = won;
-      bet.payout = payout;
-      await bet.save({ session });
-
-      const user = await User.findById(userId).session(session);
-      if (!user) {
-        throw new Error('User not found');
-      }
-
-      const newBalance = Math.max(user.balance + payout, 0);
-      await User.findByIdAndUpdate(
-        userId,
-        { $set: { balance: newBalance, updatedAt: new Date() } },
-        { session }
-      );
-
-      await session.commitTransaction();
-      res.json({ bet, balance: newBalance });
-    } catch (err) {
-      await session.abortTransaction();
-      throw err;
-    } finally {
-      session.endSession();
-    }
-  } catch (err) {
-    console.error(`[${new Date().toISOString()}] Error in getBetResult:`, err.message, err.stack);
-    res.status(500).json({ error: 'Server error' });
   }
 };
 
