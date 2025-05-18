@@ -479,6 +479,12 @@ exports.getBetHistory = async (req, res) => {
       bets.map(async (bet) => {
         const round = await Round.findOne({ period: bet.period });
         const isPending = !round || round.expiresAt > new Date();
+        console.log(`[${new Date().toISOString()}] Bet status for ${bet.period}:`, {
+          isPending,
+          roundExpiresAt: round ? round.expiresAt : null,
+          betWon: bet.won,
+          betResult: bet.result,
+        });
         return {
           ...bet.toObject(),
           status: isPending ? 'pending' : 'finalized',
@@ -524,42 +530,65 @@ exports.getBetResult = async (req, res) => {
     const validBetTypes = ['color', 'number'];
     const validColors = ['Green', 'Red'];
     if (!validBetTypes.includes(bet.type)) {
+      console.error(`[${new Date().toISOString()}] Invalid bet type: ${bet.type}`);
       return res.status(400).json({ error: 'Invalid bet type' });
     }
     if (bet.type === 'color' && !validColors.includes(bet.value)) {
+      console.error(`[${new Date().toISOString()}] Invalid color value: ${bet.value}`);
       return res.status(400).json({ error: 'Invalid color value' });
     }
     if (bet.type === 'number' && !/^\d$/.test(bet.value)) {
+      console.error(`[${new Date().toISOString()}] Invalid number value: ${bet.value}`);
       return res.status(400).json({ error: 'Invalid number value' });
     }
 
     if (bet.result && bet.won !== undefined) {
-      console.log(`[${new Date().toISOString()}] Returning existing bet result:`, bet);
+      console.log(`[${new Date().toISOString()}] Returning existing bet result:`, {
+        period,
+        won: bet.won,
+        result: bet.result,
+        payout: bet.payout,
+      });
       return res.json({ bet });
     }
 
     let round = await Round.findOne({ period });
     if (!round) {
       round = await createRound(period);
-      console.log(`[${new Date().toISOString()}] Round created:`, { period, resultNumber: round.resultNumber, resultColor: round.resultColor });
+      console.log(`[${new Date().toISOString()}] Round created:`, {
+        period,
+        resultNumber: round.resultNumber,
+        resultColor: round.resultColor,
+        expiresAt: round.expiresAt,
+      });
     } else {
       console.log(`[${new Date().toISOString()}] Using existing round:`, {
         period,
         resultNumber: round.resultNumber,
         resultColor: round.resultColor,
+        expiresAt: round.expiresAt,
         isManuallySet: round.isManuallySet,
       });
     }
 
-    const gracePeriod = 10000;
-    if (round.expiresAt < new Date(Date.now() - gracePeriod)) {
+    const now = new Date();
+    const gracePeriod = 20000; // Increased to 20s to account for delays
+    if (round.expiresAt > now) {
+      console.log(`[${new Date().toISOString()}] Round still active:`, {
+        period,
+        expiresAt: round.expiresAt,
+        timeLeft: (round.expiresAt - now) / 1000,
+      });
+      return res.status(400).json({ error: 'Round is still active', bet });
+    }
+    if (round.expiresAt < new Date(now - gracePeriod)) {
       console.error(`[${new Date().toISOString()}] Round expired beyond grace period:`, {
         period,
         expiresAt: round.expiresAt,
-        currentTime: new Date(),
+        currentTime: now,
         gracePeriod,
       });
-      return res.status(400).json({ error: 'Round has expired' });
+      return res.status(400).json({ error: 'Round has expired beyond grace period' });
     }
 
     const { resultNumber, resultColor } = round;
@@ -578,6 +607,7 @@ exports.getBetResult = async (req, res) => {
     }
 
     console.log(`[${new Date().toISOString()}] Bet result calculated:`, {
+      period,
       won,
       payout,
       resultNumber,
@@ -609,6 +639,7 @@ exports.getBetResult = async (req, res) => {
       console.log(`[${new Date().toISOString()}] Bet updated successfully:`, {
         period,
         won,
+        result: bet.result,
         payout,
         newBalance,
       });
@@ -626,7 +657,7 @@ exports.getBetResult = async (req, res) => {
   }
 };
 
-// Other endpoints unchanged (for brevity, included below as reference)
+// Other endpoints unchanged (included for completeness)
 exports.getBetStats = async (req, res) => {
   try {
     const bets = await Bet.find({ userId: req.user.id });
