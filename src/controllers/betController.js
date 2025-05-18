@@ -1,6 +1,3 @@
-
-
-
 // const Bet = require('../models/Bet');
 // const User = require('../models/User');
 // const Round = require('../models/Round');
@@ -591,7 +588,6 @@ exports.placeBet = async (req, res) => {
   }
 };
 
-// Other endpoints remain unchanged
 exports.getBetResult = async (req, res) => {
   try {
     const { period } = req.params;
@@ -752,7 +748,6 @@ exports.preGenerateRound = async (req, res) => {
     if (!/^round-\d+$/.test(period)) {
       console.error(`[${new Date().toISOString()}] Invalid period format in preGenerateRound: ${period}`);
       return res.status(400).json({ error: 'Invalid period format' });
- zomaar een voorbeeld om te kijken of het werkt
     }
 
     const round = await createRound(period);
