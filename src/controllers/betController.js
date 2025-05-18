@@ -2118,9 +2118,20 @@ exports.getAllRounds = async (req, res) => {
   }
 };
 
-exports.getSchedulerHealth = async (req, res) => {
+// exports.getSchedulerHealth = async (req, res) => {
+//   try {
+//     res.json({ status: 'no_scheduler', lastRun: null });
+//   } catch (err) {
+//     console.error(`[${new Date().toISOString()}] Error in getSchedulerHealth:`, err.message, err.stack);
+//     res.status(500).json({ error: 'Server error', details: err.message });
+//   }
+// };
+
+ exports.getSchedulerHealth = async (req, res) => {
   try {
-    res.json({ status: 'no_scheduler', lastRun: null });
+    const { checkSchedulerHealth } = require('../services/scheduler');
+    const health = await checkSchedulerHealth();
+    res.json(health);
   } catch (err) {
     console.error(`[${new Date().toISOString()}] Error in getSchedulerHealth:`, err.message, err.stack);
     res.status(500).json({ error: 'Server error', details: err.message });
