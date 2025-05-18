@@ -459,27 +459,96 @@
 
 //     const processedBets = await Promise.all(
 //       bets.map(async (bet) => {
-//         // Validate bet data
 //         if (!bet.type || !bet.value || !bet.amount || !bet.period) {
+//           await Bet.updateOne(
+//             { _id: bet._id },
+//             { status: 'invalid', updatedAt: new Date(), error: 'Missing required fields' }
+//           );
 //           return { ...bet, status: 'invalid', error: 'Missing required fields' };
 //         }
 
-//         // If bet is finalized, return as is
-//         if (bet.won !== undefined) {
+//         if (bet.status === 'finalized') {
 //           return { ...bet, status: 'finalized' };
 //         }
 
-//         // For pending bets, check the round status
 //         const round = await Round.findOne({ period: bet.period }).lean();
 //         if (!round) {
-//           return { ...bet, status: 'pending', roundStatus: 'not_found' };
+//           const session = await Bet.startSession();
+//           session.startTransaction();
+//           try {
+//             const user = await User.findById(bet.userId).session(session);
+//             if (user) {
+//               const newBalance = Math.max(user.balance + bet.amount, 0);
+//               await User.findByIdAndUpdate(
+//                 bet.userId,
+//                 { $set: { balance: newBalance, updatedAt: new Date() } },
+//                 { session }
+//               );
+//               await Bet.updateOne(
+//                 { _id: bet._id },
+//                 {
+//                   status: 'invalid',
+//                   updatedAt: new Date(),
+//                   error: 'Round data missing, bet refunded',
+//                 },
+//                 { session }
+//               );
+//               await session.commitTransaction();
+//               console.log(`[${new Date().toISOString()}] Refunded bet in getBetHistory:`, {
+//                 betId: bet._id,
+//                 userId: bet.userId,
+//                 period: bet.period,
+//               });
+//               return {
+//                 ...bet,
+//                 status: 'invalid',
+//                 roundStatus: 'not_found',
+//                 error: 'Round data missing, bet refunded',
+//               };
+//             } else {
+//               await Bet.updateOne(
+//                 { _id: bet._id },
+//                 {
+//                   status: 'invalid',
+//                   updatedAt: new Date(),
+//                   error: 'Round data missing, user not found',
+//                 },
+//                 { session }
+//               );
+//               await session.commitTransaction();
+//               console.warn(`[${new Date().toISOString()}] Marked bet invalid (user not found) in getBetHistory:`, {
+//                 betId: bet._id,
+//                 userId: bet.userId,
+//                 period: bet.period,
+//               });
+//               return {
+//                 ...bet,
+//                 status: 'invalid',
+//                 roundStatus: 'not_found',
+//                 error: 'Round data missing, user not found',
+//               };
+//             }
+//           } catch (err) {
+//             await session.abortTransaction();
+//             console.error(`[${new Date().toISOString()}] Error refunding bet in getBetHistory:`, {
+//               betId: bet._id,
+//               userId: bet.userId,
+//               period: bet.period,
+//               error: err.message,
+//             });
+//             return {
+//               ...bet,
+//               status: 'pending',
+//               roundStatus: 'not_found',
+//               error: 'Failed to process bet refund',
+//             };
+//           } finally {
+//             session.endSession();
+//           }
 //         }
 
-//         // Check if the round has expired
 //         const now = Date.now();
-//         const gracePeriod = 10000; // 10 seconds
-//         if (round.expiresAt < new Date(now - gracePeriod)) {
-//           // Round has expired, try to finalize the bet
+//         if (round.expiresAt < new Date(now)) {
 //           try {
 //             const { resultNumber, resultColor } = round;
 //             let won = false;
@@ -493,7 +562,6 @@
 //               payout = won ? bet.amount * PAYOUT_MULTIPLIERS.number : 0;
 //             }
 
-//             // Update the bet
 //             await Bet.updateOne(
 //               { _id: bet._id },
 //               {
@@ -501,6 +569,7 @@
 //                 won,
 //                 payout,
 //                 status: 'finalized',
+//                 updatedAt: new Date(),
 //               }
 //             );
 
@@ -512,12 +581,16 @@
 //               status: 'finalized',
 //             };
 //           } catch (err) {
-//             console.error(`[${new Date().toISOString()}] Error finalizing bet:`, err.message);
+//             console.error(`[${new Date().toISOString()}] Error finalizing bet in getBetHistory:`, {
+//               betId: bet._id,
+//               userId: bet.userId,
+//               period: bet.period,
+//               error: err.message,
+//             });
 //             return { ...bet, status: 'pending', roundStatus: 'error_finalizing' };
 //           }
 //         }
 
-//         // Round is still active
 //         return {
 //           ...bet,
 //           status: 'pending',
@@ -538,7 +611,7 @@
 //   try {
 //     const bets = await Bet.find({
 //       userId: req.user.id,
-//       won: { $exists: false },
+//       status: 'pending',
 //     })
 //       .sort({ createdAt: -1 })
 //       .lean();
@@ -546,18 +619,136 @@
 //     const processedBets = await Promise.all(
 //       bets.map(async (bet) => {
 //         if (!bet.type || !bet.value || !bet.amount || !bet.period) {
+//           await Bet.updateOne(
+//             { _id: bet._id },
+//             { status: 'invalid', updatedAt: new Date(), error: 'Missing required fields' }
+//           );
 //           return { ...bet, status: 'invalid', error: 'Missing required fields' };
 //         }
 
 //         const round = await Round.findOne({ period: bet.period }).lean();
 //         if (!round) {
-//           return { ...bet, status: 'pending', roundStatus: 'not_found' };
+//           const session = await Bet.startSession();
+//           session.startTransaction();
+//           try {
+//             const user = await User.findById(bet.userId).session(session);
+//             if (user) {
+//               const newBalance = Math.max(user.balance + bet.amount, 0);
+//               await User.findByIdAndUpdate(
+//                 bet.userId,
+//                 { $set: { balance: newBalance, updatedAt: new Date() } },
+//                 { session }
+//               );
+//               await Bet.updateOne(
+//                 { _id: bet._id },
+//                 {
+//                   status: 'invalid',
+//                   updatedAt: new Date(),
+//                   error: 'Round data missing, bet refunded',
+//                 },
+//                 { session }
+//               );
+//               await session.commitTransaction();
+//               console.log(`[${new Date().toISOString()}] Refunded bet in getPendingBets:`, {
+//                 betId: bet._id,
+//                 userId: bet.userId,
+//                 period: bet.period,
+//               });
+//               return {
+//                 ...bet,
+//                 status: 'invalid',
+//                 roundStatus: 'not_found',
+//                 error: 'Round data missing, bet refunded',
+//               };
+//             } else {
+//               await Bet.updateOne(
+//                 { _id: bet._id },
+//                 {
+//                   status: 'invalid',
+//                   updatedAt: new Date(),
+//                   error: 'Round data missing, user not found',
+//                 },
+//                 { session }
+//               );
+//               await session.commitTransaction();
+//               console.warn(`[${new Date().toISOString()}] Marked bet invalid (user not found) in getPendingBets:`, {
+//                 betId: bet._id,
+//                 userId: bet.userId,
+//                 period: bet.period,
+//               });
+//               return {
+//                 ...bet,
+//                 status: 'invalid',
+//                 roundStatus: 'not_found',
+//                 error: 'Round data missing, user not found',
+//               };
+//             }
+//           } catch (err) {
+//             await session.abortTransaction();
+//             console.error(`[${new Date().toISOString()}] Error refunding bet in getPendingBets:`, {
+//               betId: bet._id,
+//               userId: bet.userId,
+//               period: bet.period,
+//               error: err.message,
+//             });
+//             return {
+//               ...bet,
+//               status: 'pending',
+//               roundStatus: 'not_found',
+//               error: 'Failed to process bet refund',
+//             };
+//           } finally {
+//             session.endSession();
+//           }
+//         }
+
+//         if (round.expiresAt < new Date()) {
+//           try {
+//             const { resultNumber, resultColor } = round;
+//             let won = false;
+//             let payout = 0;
+
+//             if (bet.type === 'color') {
+//               won = bet.value === resultColor;
+//               payout = won ? bet.amount * PAYOUT_MULTIPLIERS.color : 0;
+//             } else if (bet.type === 'number') {
+//               won = parseInt(bet.value) === resultNumber;
+//               payout = won ? bet.amount * PAYOUT_MULTIPLIERS.number : 0;
+//             }
+
+//             await Bet.updateOne(
+//               { _id: bet._id },
+//               {
+//                 result: bet.type === 'color' ? resultColor : resultNumber.toString(),
+//                 won,
+//                 payout,
+//                 status: 'finalized',
+//                 updatedAt: new Date(),
+//               }
+//             );
+
+//             return {
+//               ...bet,
+//               result: bet.type === 'color' ? resultColor : resultNumber.toString(),
+//               won,
+//               payout,
+//               status: 'finalized',
+//             };
+//           } catch (err) {
+//             console.error(`[${new Date().toISOString()}] Error finalizing pending bet in getPendingBets:`, {
+//               betId: bet._id,
+//               userId: bet.userId,
+//               period: bet.period,
+//               error: err.message,
+//             });
+//             return { ...bet, status: 'pending', roundStatus: 'error_finalizing' };
+//           }
 //         }
 
 //         return {
 //           ...bet,
 //           status: 'pending',
-//           roundStatus: round.expiresAt > new Date() ? 'active' : 'expired',
+//           roundStatus: 'active',
 //           roundExpiresAt: round.expiresAt,
 //         };
 //       })
@@ -574,8 +765,8 @@
 //   try {
 //     const bets = await Bet.find({ userId: req.user.id });
 
-//     const finalizedBets = bets.filter((bet) => bet.won !== undefined);
-//     const pendingBets = bets.filter((bet) => bet.won === undefined);
+//     const finalizedBets = bets.filter((bet) => bet.status === 'finalized');
+//     const pendingBets = bets.filter((bet) => bet.status === 'pending');
 
 //     const totalBets = finalizedBets.length;
 //     const wins = finalizedBets.filter((bet) => bet.won).length;
@@ -667,8 +858,8 @@
 //         value,
 //         amount,
 //         clientSeed,
-//         createdAt: new Date(),
 //         status: 'pending',
+//         createdAt: new Date(),
 //       });
 //       await bet.save({ session });
 
@@ -725,33 +916,64 @@
 //       return res.status(400).json({ error: 'Invalid number value' });
 //     }
 
-//     if (bet.result && bet.won !== undefined) {
+//     if (bet.status === 'finalized') {
 //       console.log(`[${new Date().toISOString()}] Returning existing bet result:`, bet);
 //       return res.json({ bet });
 //     }
 
-//     let round = await Round.findOne({ period });
+//     const round = await Round.findOne({ period });
 //     if (!round) {
-//       round = await createRound(period);
-//       console.log(`[${new Date().toISOString()}] Round created:`, { period, resultNumber: round.resultNumber, resultColor: round.resultColor });
-//     } else {
-//       console.log(`[${new Date().toISOString()}] Using existing round:`, {
-//         period,
-//         resultNumber: round.resultNumber,
-//         resultColor: round.resultColor,
-//         isManuallySet: round.isManuallySet,
-//       });
-//     }
+//       const session = await Bet.startSession();
+//       session.startTransaction();
+//       try {
+//         const user = await User.findById(userId).session(session);
+//         if (!user) {
+//           throw new Error('User not found');
+//         }
 
-//     const gracePeriod = 10000;
-//     if (round.expiresAt < new Date(Date.now() - gracePeriod)) {
-//       console.error(`[${new Date().toISOString()}] Round expired beyond grace period:`, {
-//         period,
-//         expiresAt: round.expiresAt,
-//         currentTime: new Date(),
-//         gracePeriod,
-//       });
-//       return res.status(400).json({ error: 'Round has expired' });
+//         const newBalance = Math.max(user.balance + bet.amount, 0);
+//         await User.findByIdAndUpdate(
+//           userId,
+//           { $set: { balance: newBalance, updatedAt: new Date() } },
+//           { session }
+//         );
+
+//         await Bet.updateOne(
+//           { _id: bet._id },
+//           {
+//             status: 'invalid',
+//             updatedAt: new Date(),
+//             error: 'Round data missing, bet refunded',
+//           },
+//           { session }
+//         );
+
+//         await session.commitTransaction();
+//         console.log(`[${new Date().toISOString()}] Refunded bet in getBetResult:`, {
+//           betId: bet._id,
+//           userId,
+//           period,
+//         });
+//         return res.json({
+//           bet: {
+//             ...bet,
+//             status: 'invalid',
+//             error: 'Round data missing, bet refunded',
+//           },
+//           balance: newBalance,
+//         });
+//       } catch (err) {
+//         await session.abortTransaction();
+//         console.error(`[${new Date().toISOString()}] Error refunding bet in getBetResult:`, {
+//           betId: bet._id,
+//           userId,
+//           period,
+//           error: err.message,
+//         });
+//         return res.status(500).json({ error: 'Server error', details: err.message });
+//       } finally {
+//         session.endSession();
+//       }
 //     }
 
 //     const { resultNumber, resultColor } = round;
@@ -797,16 +1019,27 @@
 //       );
 
 //       await session.commitTransaction();
+//       console.log(`[${new Date().toISOString()}] Finalized bet in getBetResult:`, {
+//         betId: bet._id,
+//         userId,
+//         period,
+//       });
 //       res.json({ bet, balance: newBalance });
 //     } catch (err) {
 //       await session.abortTransaction();
+//       console.error(`[${new Date().toISOString()}] Error finalizing bet in getBetResult:`, {
+//         betId: bet._id,
+//         userId,
+//         period,
+//         error: err.message,
+//       });
 //       throw err;
 //     } finally {
 //       session.endSession();
 //     }
 //   } catch (err) {
 //     console.error(`[${new Date().toISOString()}] Error in getBetResult:`, err.message, err.stack);
-//     res.status(500).json({ error: 'Server error' });
+//     res.status(500).json({ error: 'Server error', details: err.message });
 //   }
 // };
 
@@ -864,10 +1097,22 @@
 
 // exports.triggerPreGenerateRounds = async (req, res) => {
 //   try {
-//     const { preGenerateRoundsFor24Hours } = require('../services/scheduler');
-//     const result = await preGenerateRoundsFor24Hours();
-//     console.log(`[${new Date().toISOString()}] Manual pre-generation triggered:`, result);
-//     res.json(result);
+//     const roundDuration = 120 * 1000; // 2 minutes
+//     const now = Date.now();
+//     const roundsToGenerate = 24 * 60 * 60 * 1000 / roundDuration; // 720 rounds
+//     const generatedRounds = [];
+
+//     for (let i = 0; i < roundsToGenerate; i++) {
+//       const roundStart = Math.floor((now + i * roundDuration) / roundDuration) * roundDuration;
+//       const period = `round-${roundStart}`;
+//       const round = await createRound(period);
+//       generatedRounds.push(period);
+//     }
+
+//     console.log(`[${new Date().toISOString()}] Manual pre-generation triggered:`, {
+//       count: generatedRounds.length,
+//     });
+//     res.json({ count: generatedRounds.length, periods: generatedRounds });
 //   } catch (err) {
 //     console.error(`[${new Date().toISOString()}] Error in triggerPreGenerateRounds:`, err.message, err.stack);
 //     res.status(500).json({ error: 'Server error', details: err.message });
@@ -987,6 +1232,7 @@
 //   }
 // };
 
+
 const Bet = require('../models/Bet');
 const User = require('../models/User');
 const Round = require('../models/Round');
@@ -1026,7 +1272,7 @@ exports.getBetHistory = async (req, res) => {
           try {
             const user = await User.findById(bet.userId).session(session);
             if (user) {
-              const newBalance = Math.max(user.balance + bet.amount, 0);
+              const newBalance = user.balance + bet.amount;
               await User.findByIdAndUpdate(
                 bet.userId,
                 { $set: { balance: newBalance, updatedAt: new Date() } },
@@ -1046,12 +1292,15 @@ exports.getBetHistory = async (req, res) => {
                 betId: bet._id,
                 userId: bet.userId,
                 period: bet.period,
+                refundedAmount: bet.amount,
+                newBalance,
               });
               return {
                 ...bet,
                 status: 'invalid',
                 roundStatus: 'not_found',
                 error: 'Round data missing, bet refunded',
+                newBalance,
               };
             } else {
               await Bet.updateOne(
@@ -1097,6 +1346,8 @@ exports.getBetHistory = async (req, res) => {
 
         const now = Date.now();
         if (round.expiresAt < new Date(now)) {
+          const session = await Bet.startSession();
+          session.startTransaction();
           try {
             const { resultNumber, resultColor } = round;
             let won = false;
@@ -1118,8 +1369,31 @@ exports.getBetHistory = async (req, res) => {
                 payout,
                 status: 'finalized',
                 updatedAt: new Date(),
-              }
+              },
+              { session }
             );
+
+            const user = await User.findById(bet.userId).session(session);
+            if (!user) {
+              throw new Error('User not found');
+            }
+
+            const newBalance = user.balance + payout;
+            await User.findByIdAndUpdate(
+              bet.userId,
+              { $set: { balance: newBalance, updatedAt: new Date() } },
+              { session }
+            );
+
+            await session.commitTransaction();
+            console.log(`[${new Date().toISOString()}] Finalized bet in getBetHistory:`, {
+              betId: bet._id,
+              userId: bet.userId,
+              period: bet.period,
+              won,
+              payout,
+              newBalance,
+            });
 
             return {
               ...bet,
@@ -1127,8 +1401,10 @@ exports.getBetHistory = async (req, res) => {
               won,
               payout,
               status: 'finalized',
+              newBalance,
             };
           } catch (err) {
+            await session.abortTransaction();
             console.error(`[${new Date().toISOString()}] Error finalizing bet in getBetHistory:`, {
               betId: bet._id,
               userId: bet.userId,
@@ -1136,6 +1412,8 @@ exports.getBetHistory = async (req, res) => {
               error: err.message,
             });
             return { ...bet, status: 'pending', roundStatus: 'error_finalizing' };
+          } finally {
+            session.endSession();
           }
         }
 
@@ -1181,7 +1459,7 @@ exports.getPendingBets = async (req, res) => {
           try {
             const user = await User.findById(bet.userId).session(session);
             if (user) {
-              const newBalance = Math.max(user.balance + bet.amount, 0);
+              const newBalance = user.balance + bet.amount;
               await User.findByIdAndUpdate(
                 bet.userId,
                 { $set: { balance: newBalance, updatedAt: new Date() } },
@@ -1201,12 +1479,15 @@ exports.getPendingBets = async (req, res) => {
                 betId: bet._id,
                 userId: bet.userId,
                 period: bet.period,
+                refundedAmount: bet.amount,
+                newBalance,
               });
               return {
                 ...bet,
                 status: 'invalid',
                 roundStatus: 'not_found',
                 error: 'Round data missing, bet refunded',
+                newBalance,
               };
             } else {
               await Bet.updateOne(
@@ -1251,6 +1532,8 @@ exports.getPendingBets = async (req, res) => {
         }
 
         if (round.expiresAt < new Date()) {
+          const session = await Bet.startSession();
+          session.startTransaction();
           try {
             const { resultNumber, resultColor } = round;
             let won = false;
@@ -1272,8 +1555,31 @@ exports.getPendingBets = async (req, res) => {
                 payout,
                 status: 'finalized',
                 updatedAt: new Date(),
-              }
+              },
+              { session }
             );
+
+            const user = await User.findById(bet.userId).session(session);
+            if (!user) {
+              throw new Error('User not found');
+            }
+
+            const newBalance = user.balance + payout;
+            await User.findByIdAndUpdate(
+              bet.userId,
+              { $set: { balance: newBalance, updatedAt: new Date() } },
+              { session }
+            );
+
+            await session.commitTransaction();
+            console.log(`[${new Date().toISOString()}] Finalized bet in getPendingBets:`, {
+              betId: bet._id,
+              userId: bet.userId,
+              period: bet.period,
+              won,
+              payout,
+              newBalance,
+            });
 
             return {
               ...bet,
@@ -1281,15 +1587,19 @@ exports.getPendingBets = async (req, res) => {
               won,
               payout,
               status: 'finalized',
+              newBalance,
             };
           } catch (err) {
-            console.error(`[${new Date().toISOString()}] Error finalizing pending bet in getPendingBets:`, {
+            await session.abortTransaction();
+            console.error(`[${new Date().toISOString()}] Error finalizing bet in getPendingBets:`, {
               betId: bet._id,
               userId: bet.userId,
               period: bet.period,
               error: err.message,
             });
             return { ...bet, status: 'pending', roundStatus: 'error_finalizing' };
+          } finally {
+            session.endSession();
           }
         }
 
@@ -1395,7 +1705,7 @@ exports.placeBet = async (req, res) => {
       const newBalance = user.balance - amount;
       await User.findByIdAndUpdate(
         req.user.id,
-        { balance: newBalance, updatedAt: new Date() },
+        { $set: { balance: newBalance, updatedAt: new Date() } },
         { session }
       );
 
@@ -1412,9 +1722,21 @@ exports.placeBet = async (req, res) => {
       await bet.save({ session });
 
       await session.commitTransaction();
+      console.log(`[${new Date().toISOString()}] Bet placed:`, {
+        betId: bet._id,
+        userId: req.user.id,
+        period,
+        amount,
+        newBalance,
+      });
       res.json({ bet, balance: newBalance });
     } catch (err) {
       await session.abortTransaction();
+      console.error(`[${new Date().toISOString()}] Error in placeBet:`, {
+        userId: req.user.id,
+        period,
+        error: err.message,
+      });
       throw err;
     } finally {
       session.endSession();
@@ -1430,7 +1752,7 @@ exports.getBetResult = async (req, res) => {
     const { period } = req.params;
     const userId = req.user.id;
     const roundDuration = 120 * 1000;
-    console.log(`[${new Date().toISOString()}] Fetching bet result:`, { period });
+    console.log(`[${new Date().toISOString()}] Fetching bet result:`, { period, userId });
 
     const periodMatch = period.match(/^round-(\d+)$/);
     if (!periodMatch) {
@@ -1455,18 +1777,26 @@ exports.getBetResult = async (req, res) => {
     const validBetTypes = ['color', 'number'];
     const validColors = ['Green', 'Red'];
     if (!validBetTypes.includes(bet.type)) {
+      console.error(`[${new Date().toISOString()}] Invalid bet type:`, { betId: bet._id, type: bet.type });
       return res.status(400).json({ error: 'Invalid bet type' });
     }
     if (bet.type === 'color' && !validColors.includes(bet.value)) {
+      console.error(`[${new Date().toISOString()}] Invalid color value:`, { betId: bet._id, value: bet.value });
       return res.status(400).json({ error: 'Invalid color value' });
     }
     if (bet.type === 'number' && !/^\d$/.test(bet.value)) {
+      console.error(`[${new Date().toISOString()}] Invalid number value:`, { betId: bet._id, value: bet.value });
       return res.status(400).json({ error: 'Invalid number value' });
     }
 
     if (bet.status === 'finalized') {
-      console.log(`[${new Date().toISOString()}] Returning existing bet result:`, bet);
-      return res.json({ bet });
+      console.log(`[${new Date().toISOString()}] Returning existing bet result:`, {
+        betId: bet._id,
+        won: bet.won,
+        payout: bet.payout,
+      });
+      const user = await User.findById(userId).select('balance');
+      return res.json({ bet, balance: user ? user.balance : null });
     }
 
     const round = await Round.findOne({ period });
@@ -1479,7 +1809,7 @@ exports.getBetResult = async (req, res) => {
           throw new Error('User not found');
         }
 
-        const newBalance = Math.max(user.balance + bet.amount, 0);
+        const newBalance = user.balance + bet.amount;
         await User.findByIdAndUpdate(
           userId,
           { $set: { balance: newBalance, updatedAt: new Date() } },
@@ -1501,10 +1831,12 @@ exports.getBetResult = async (req, res) => {
           betId: bet._id,
           userId,
           period,
+          refundedAmount: bet.amount,
+          newBalance,
         });
         return res.json({
           bet: {
-            ...bet,
+            ...bet.toObject(),
             status: 'invalid',
             error: 'Round data missing, bet refunded',
           },
@@ -1525,7 +1857,6 @@ exports.getBetResult = async (req, res) => {
     }
 
     const { resultNumber, resultColor } = round;
-
     let won = false;
     let payout = 0;
 
@@ -1538,6 +1869,9 @@ exports.getBetResult = async (req, res) => {
     }
 
     console.log(`[${new Date().toISOString()}] Bet result calculated:`, {
+      betId: bet._id,
+      userId,
+      period,
       won,
       payout,
       resultNumber,
@@ -1548,18 +1882,29 @@ exports.getBetResult = async (req, res) => {
     const session = await Bet.startSession();
     session.startTransaction();
     try {
-      bet.result = bet.type === 'color' ? resultColor : resultNumber.toString();
-      bet.won = won;
-      bet.payout = payout;
-      bet.status = 'finalized';
-      await bet.save({ session });
+      await Bet.updateOne(
+        { _id: bet._id },
+        {
+          result: bet.type === 'color' ? resultColor : resultNumber.toString(),
+          won,
+          payout,
+          status: 'finalized',
+          updatedAt: new Date(),
+        },
+        { session }
+      );
+
+      const updatedBet = await Bet.findById(bet._id).session(session);
+      if (!updatedBet) {
+        throw new Error('Bet not found after update');
+      }
 
       const user = await User.findById(userId).session(session);
       if (!user) {
         throw new Error('User not found');
       }
 
-      const newBalance = Math.max(user.balance + payout, 0);
+      const newBalance = user.balance + payout;
       await User.findByIdAndUpdate(
         userId,
         { $set: { balance: newBalance, updatedAt: new Date() } },
@@ -1567,12 +1912,16 @@ exports.getBetResult = async (req, res) => {
       );
 
       await session.commitTransaction();
-      console.log(`[${new Date().toISOString()}] Finalized bet in getBetResult:`, {
+      console.log(`[${new Date().toISOString()}] Finalized bet and updated balance:`, {
         betId: bet._id,
         userId,
         period,
+        won,
+        payout,
+        newBalance,
       });
-      res.json({ bet, balance: newBalance });
+
+      res.json({ bet: updatedBet, balance: newBalance });
     } catch (err) {
       await session.abortTransaction();
       console.error(`[${new Date().toISOString()}] Error finalizing bet in getBetResult:`, {
@@ -1581,7 +1930,7 @@ exports.getBetResult = async (req, res) => {
         period,
         error: err.message,
       });
-      throw err;
+      return res.status(500).json({ error: 'Server error', details: err.message });
     } finally {
       session.endSession();
     }
@@ -1769,20 +2118,9 @@ exports.getAllRounds = async (req, res) => {
   }
 };
 
-// exports.getSchedulerHealth = async (req, res) => {
-//   try {
-//     res.json({ status: 'no_scheduler', lastRun: null });
-//   } catch (err) {
-//     console.error(`[${new Date().toISOString()}] Error in getSchedulerHealth:`, err.message, err.stack);
-//     res.status(500).json({ error: 'Server error', details: err.message });
-//   }
-// };
-
 exports.getSchedulerHealth = async (req, res) => {
   try {
-    const { checkSchedulerHealth } = require('../services/scheduler');
-    const health = await checkSchedulerHealth();
-    res.json(health);
+    res.json({ status: 'no_scheduler', lastRun: null });
   } catch (err) {
     console.error(`[${new Date().toISOString()}] Error in getSchedulerHealth:`, err.message, err.stack);
     res.status(500).json({ error: 'Server error', details: err.message });
