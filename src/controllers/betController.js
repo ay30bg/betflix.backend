@@ -1808,12 +1808,22 @@ exports.getAllRounds = async (req, res) => {
 exports.getRecentRounds = async (req, res) => {
   try {
     const now = new Date();
+    console.log(`[${new Date().toISOString()}] Fetching recent rounds, current time:`, { now });
+
     const rounds = await Round.find({
       expiresAt: { $lt: now }, // Only include rounds that have expired
+      resultNumber: { $ne: null }, // Ensure rounds have results
+      resultColor: { $ne: null },
     })
       .sort({ expiresAt: -1 }) // Sort by expiresAt descending (newest first)
       .limit(10) // Limit to exactly 10 rounds
       .select('period resultNumber resultColor expiresAt');
+
+    console.log(`[${new Date().toISOString()}] Found rounds:`, {
+      count: rounds.length,
+      periods: rounds.map(r => r.period),
+      expiresAt: rounds.map(r => r.expiresAt.toISOString()),
+    });
 
     const formattedRounds = rounds.map((round) => ({
       period: round.period,
@@ -1824,7 +1834,7 @@ exports.getRecentRounds = async (req, res) => {
       expiresAt: round.expiresAt,
     }));
 
-    console.log(`[${new Date().toISOString()}] Fetched recent past rounds:`, { count: formattedRounds.length });
+    console.log(`[${new Date().toISOString()}] Returning recent past rounds:`, { count: formattedRounds.length });
     res.json(formattedRounds);
   } catch (err) {
     console.error(`[${new Date().toISOString()}] Error in getRecentRounds:`, err.message, err.stack);
