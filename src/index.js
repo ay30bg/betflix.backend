@@ -112,6 +112,7 @@ const transactionRoutes = require('./routes/transactionRoutes');
 const referralRoutes = require('./routes/referralRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const supportRoutes = require('./routes/supportRoutes');
 const { startScheduler, checkSchedulerHealth, generateRound } = require('./services/scheduler');
 require('dotenv').config();
 
@@ -230,6 +231,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/referral', referralRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/support', supportRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {
