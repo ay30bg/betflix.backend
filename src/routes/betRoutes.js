@@ -2,6 +2,7 @@
 // const router = express.Router();
 // const {
 //   getBetHistory,
+//   getPendingBets, // Added new controller function
 //   getBetStats,
 //   placeBet,
 //   getCurrentRound,
@@ -9,39 +10,75 @@
 //   preGenerateRound,
 //   cleanupInvalidBets,
 //   setRoundOutcome,
-//   getAllRounds, // New endpoint
+//   getAllRounds,
 // } = require('../controllers/betController');
 // const authMiddleware = require('../middleware/auth');
 // const adminAuthMiddleware = require('../middleware/adminAuth');
 // const { body, param, validationResult } = require('express-validator');
 
+// // Validation middleware for all routes
+// const validateRequest = (req, res, next) => {
+//   const errors = validationResult(req);
+//   if (!errors.isEmpty()) {
+//     console.error(`[${new Date().toISOString()}] Validation errors:`, errors.array());
+//     return res.status(400).json({ errors: errors.array() });
+//   }
+//   next();
+// };
+
 // // User bet routes
 // router.get('/history', authMiddleware, getBetHistory);
+
+// router.get('/pending', authMiddleware, getPendingBets);
+
 // router.get('/stats', authMiddleware, getBetStats);
-// router.post('/', authMiddleware, placeBet);
+
+// router.post(
+//   '/',
+//   authMiddleware,
+//   [
+//     body('type').isIn(['color', 'number']).withMessage('Invalid bet type'),
+//     body('value').notEmpty().withMessage('Value is required'),
+//     body('amount').isFloat({ min: 0 }).withMessage('Amount must be a positive number'),
+//     body('clientSeed').isString().notEmpty().withMessage('Client seed is required'),
+//   ],
+//   validateRequest,
+//   placeBet
+// );
+
 // router.get('/current', authMiddleware, getCurrentRound);
-// router.get('/result/:period', authMiddleware, getBetResult);
-// router.post('/pre-generate-round', preGenerateRound);
+
+// router.get(
+//   '/result/:period',
+//   authMiddleware,
+//   [param('period').matches(/^round-\d+$/).withMessage('Invalid period format')],
+//   validateRequest,
+//   getBetResult
+// );
+
+// router.post(
+//   '/pre-generate-round',
+//   authMiddleware,
+//   [body('period').matches(/^round-\d+$/).withMessage('Invalid period format')],
+//   validateRequest,
+//   preGenerateRound
+// );
+
 // router.delete('/cleanup', authMiddleware, cleanupInvalidBets);
-// router.get('/rounds/history', authMiddleware, getAllRounds); // New route for all rounds history
+
+// router.get('/rounds/history', authMiddleware, getAllRounds);
 
 // // Admin route for setting round outcome
 // router.post(
 //   '/:period/set-outcome',
 //   adminAuthMiddleware,
 //   [
-//     param('period').notEmpty().withMessage('Period is required'),
+//     param('period').matches(/^round-\d+$/).withMessage('Invalid period format'),
 //     body('resultNumber').isInt({ min: 0, max: 9 }).withMessage('Result number must be between 0 and 9'),
 //     body('resultColor').isIn(['Green', 'Red']).withMessage('Invalid result color'),
 //   ],
-//   (req, res, next) => {
-//     const errors = validationResult(req);
-//     if (!errors.isEmpty()) {
-//       console.error('Validation errors:', errors.array());
-//       return res.status(400).json({ errors: errors.array() });
-//     }
-//     setRoundOutcome(req, res, next);
-//   }
+//   validateRequest,
+//   setRoundOutcome
 // );
 
 // module.exports = router;
@@ -50,7 +87,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getBetHistory,
-  getPendingBets, // Added new controller function
+  getPendingBets,
   getBetStats,
   placeBet,
   getCurrentRound,
@@ -59,6 +96,7 @@ const {
   cleanupInvalidBets,
   setRoundOutcome,
   getAllRounds,
+  getRecentRounds, // Added new controller function
 } = require('../controllers/betController');
 const authMiddleware = require('../middleware/auth');
 const adminAuthMiddleware = require('../middleware/adminAuth');
@@ -115,6 +153,8 @@ router.post(
 router.delete('/cleanup', authMiddleware, cleanupInvalidBets);
 
 router.get('/rounds/history', authMiddleware, getAllRounds);
+
+router.get('/rounds/recent', authMiddleware, getRecentRounds); // New endpoint for recent rounds
 
 // Admin route for setting round outcome
 router.post(
