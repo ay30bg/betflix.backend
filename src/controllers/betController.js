@@ -883,32 +883,32 @@ exports.getAllRounds = async (req, res) => {
   }
 };
 
-exports.getRecentRounds = async (req, res) => {
-  try {
-    const now = new Date();
-    const rounds = await Round.find({
-      expiresAt: { $lt: now }, // Only include rounds that have expired
-    })
-      .sort({ createdAt: -1 }) // Sort by createdAt descending (newest first)
-      .limit(10) // Limit to exactly 10 rounds
-      .select('period resultNumber resultColor expiresAt');
+// exports.getRecentRounds = async (req, res) => {
+//   try {
+//     const now = new Date();
+//     const rounds = await Round.find({
+//       expiresAt: { $lt: now }, // Only include rounds that have expired
+//     })
+//       .sort({ createdAt: -1 }) // Sort by createdAt descending (newest first)
+//       .limit(10) // Limit to exactly 10 rounds
+//       .select('period resultNumber resultColor expiresAt');
 
-    const formattedRounds = rounds.map((round) => ({
-      period: round.period,
-      result: {
-        color: round.resultColor || 'N/A',
-        number: round.resultNumber !== undefined ? round.resultNumber.toString() : 'N/A',
-      },
-      expiresAt: round.expiresAt,
-    }));
+//     const formattedRounds = rounds.map((round) => ({
+//       period: round.period,
+//       result: {
+//         color: round.resultColor || 'N/A',
+//         number: round.resultNumber !== undefined ? round.resultNumber.toString() : 'N/A',
+//       },
+//       expiresAt: round.expiresAt,
+//     }));
 
-    console.log(`[${new Date().toISOString()}] Fetched recent past rounds:`, { count: formattedRounds.length });
-    res.json(formattedRounds);
-  } catch (err) {
-    console.error(`[${new Date().toISOString()}] Error in getRecentRounds:`, err.message, err.stack);
-    res.status(500).json({ error: 'Server error', details: err.message });
-  }
-};
+//     console.log(`[${new Date().toISOString()}] Fetched recent past rounds:`, { count: formattedRounds.length });
+//     res.json(formattedRounds);
+//   } catch (err) {
+//     console.error(`[${new Date().toISOString()}] Error in getRecentRounds:`, err.message, err.stack);
+//     res.status(500).json({ error: 'Server error', details: err.message });
+//   }
+// };
 
  exports.getSchedulerHealth = async (req, res) => {
   try {
