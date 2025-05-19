@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const { getMessages, createMessage, addReply } = require('../controllers/supportController');
-const authMiddleware = require('../middleware/auth');
+const authMiddleware = require('../middleware/authMiddleware');
 const adminAuthMiddleware = require('../middleware/adminAuth');
 
 // Get messages
