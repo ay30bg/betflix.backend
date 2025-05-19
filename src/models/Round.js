@@ -12,7 +12,7 @@ const RoundSchema = new mongoose.Schema({
 });
 
 // TTL index to delete rounds 3 minutes after expiresAt
-RoundSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 180 });
+RoundSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 1200 });
 
 // Index for efficient queries
 RoundSchema.index({ period: 1 });
