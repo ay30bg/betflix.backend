@@ -1,3 +1,4 @@
+// // controllers/authController.js
 // const User = require('../models/User');
 // const Admin = require('../models/Admin');
 // const Referral = require('../models/Referral');
@@ -70,20 +71,16 @@
 //         console.warn('Invalid referral code format:', referralCode);
 //       } else {
 //         const referral = await Referral.findOne({ code: referralCode });
-//         if (referral && !referral.referredUserId) {
-//           await Referral.updateOne(
-//             { code: referralCode },
-//             { referredUserId: user._id }
-//           );
-//           await User.updateOne(
-//             { _id: referral.referrerId },
-//             { $inc: { balance: 50 } }
-//           );
+//         if (referral && !referral.referredUsers.includes(user._id)) {
+//           referral.referredUsers.push(user._id);
+//           referral.totalBonus = (referral.totalBonus || 0) + 50;
+//           referral.availableBonus = (referral.availableBonus || 0) + 50;
+//           await referral.save();
 //           console.log('Referral applied:', { referralCode, referrerId: referral.referrerId });
 //         } else {
 //           console.warn('Referral not applied:', {
 //             referralCode,
-//             reason: referral ? 'Already used' : 'Not found',
+//             reason: referral ? 'Already used or invalid' : 'Not found',
 //           });
 //         }
 //       }
@@ -93,6 +90,9 @@
 //     await Referral.create({
 //       referrerId: user._id,
 //       code: newReferralCode,
+//       referredUsers: [],
+//       totalBonus: 0,
+//       availableBonus: 0,
 //     });
 //     console.log('New referral code created:', { userId: user._id, code: newReferralCode });
 
@@ -473,6 +473,7 @@
 //   adminLogin,
 //   verifyEmail,
 //   resendVerification,
+//   authenticateToken,
 // };
 
 
@@ -506,7 +507,7 @@ const generateReferralCode = async () => {
 
 // Generate a 6-digit verification code
 const generateVerificationCode = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit code
+  return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 const signup = async (req, res) => {
@@ -528,20 +529,15 @@ const signup = async (req, res) => {
     const verificationCode = generateVerificationCode();
     const verificationCodeExpires = Date.now() + 60 * 60 * 1000; // 1 hour
 
-    const user = await User.create({
+    const user = new User({
       username,
       email,
-      password, // Hashed by pre('save')
+      password,
       balance: 0.00,
       status: 'active',
       verificationCode,
       verificationCodeExpires,
       isVerified: false,
-    });
-    console.log('User created:', {
-      id: user._id,
-      email: user.email,
-      verificationCode,
     });
 
     if (referralCode) {
@@ -549,20 +545,23 @@ const signup = async (req, res) => {
         console.warn('Invalid referral code format:', referralCode);
       } else {
         const referral = await Referral.findOne({ code: referralCode });
-        if (referral && !referral.referredUsers.includes(user._id)) {
-          referral.referredUsers.push(user._id);
-          referral.totalBonus = (referral.totalBonus || 0) + 50;
-          referral.availableBonus = (referral.availableBonus || 0) + 50;
+        if (referral) {
+          user.referredBy = referral.referrerId;
+          referral.referredUsers.push({ userId: user._id, bonusEarned: 0 });
           await referral.save();
-          console.log('Referral applied:', { referralCode, referrerId: referral.referrerId });
+          console.log('Referral linked:', { referralCode, referrerId: referral.referrerId });
         } else {
-          console.warn('Referral not applied:', {
-            referralCode,
-            reason: referral ? 'Already used or invalid' : 'Not found',
-          });
+          console.warn('Referral code not found:', referralCode);
         }
       }
     }
+
+    await user.save();
+    console.log('User created:', {
+      id: user._id,
+      email: user.email,
+      verificationCode,
+    });
 
     const newReferralCode = await generateReferralCode();
     await Referral.create({
@@ -794,7 +793,7 @@ const adminSignup = async (req, res) => {
 
     const admin = await Admin.create({
       email,
-      password, // Hashed by pre('save')
+      password,
     });
     console.log('Admin created:', { id: admin._id, email: admin.email });
 
@@ -815,7 +814,7 @@ const adminSignup = async (req, res) => {
 const adminLogin = async (req, res) => {
   const { email, password } = req.body;
 
-  console.log('Admin login attempt:', { email, password: '****' });
+  console.log('Admin login attempt:', { email, paymentUrl: '****' });
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
