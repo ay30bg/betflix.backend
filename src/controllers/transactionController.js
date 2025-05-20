@@ -242,7 +242,7 @@ const nowpaymentsConfig = require('../config/nowpayments');
 // Initiate Crypto Deposit
 const initiateCryptoDeposit = async (req, res) => {
   const { amount, cryptoCurrency, network } = req.body;
-  const userId = req.user.userId; // Changed from req.user.id
+  const userId = req.user.id; // Changed to req.user.id
 
   console.log('Deposit request:', { amount, cryptoCurrency, network, userId });
 
@@ -328,7 +328,7 @@ const initiateCryptoDeposit = async (req, res) => {
 // Initiate Crypto Withdrawal
 const initiateCryptoWithdrawal = async (req, res) => {
   const { amount, cryptoCurrency, walletAddress, network } = req.body;
-  const userId = req.user.userId; // Changed from req.user.id
+  const userId = req.user.id; // Changed to req.user.id
 
   console.log('Withdrawal request:', { amount, cryptoCurrency, walletAddress, network, userId });
 
@@ -440,6 +440,10 @@ const handleWebhook = async (req, res) => {
 
     const status = payment_status || payout_status;
     if (status === 'finished' || status === 'confirmed') {
+      if (transaction.status === 'completed') {
+        await session.abortTransaction();
+        return res.status(200).json({ message: 'Transaction already processed' });
+      }
       transaction.status = 'completed';
       if (transaction.type === 'crypto-deposit') {
         const user = await User.findById(transaction.userId).session(session);
@@ -457,7 +461,7 @@ const handleWebhook = async (req, res) => {
             type: 'crypto-deposit',
             status: 'completed',
           });
-          const isFirstDeposit = depositCount === 1; // Count includes this transaction
+          const isFirstDeposit = depositCount === 1; // Includes this transaction
           const bonusPercentage = isFirstDeposit ? 0.3 : 0.1;
           const bonus = transaction.amount * bonusPercentage;
 
