@@ -118,10 +118,10 @@
 const Referral = require('../models/Referral');
 const User = require('../models/User');
 
-// Function to generate an 8-digit numeric code
+// Generate an 8-digit numeric code
 const generateReferralCode = async () => {
-  const min = 10000000; // 00000000
-  const max = 99999999; // 99999999
+  const min = 10000000;
+  const max = 99999999;
   let code;
   let isUnique = false;
 
@@ -140,12 +140,12 @@ const generateReferralCode = async () => {
 // Get referral link
 const getReferralLink = async (req, res) => {
   try {
-    let referral = await Referral.findOne({ referrerId: req.user.userId }); // Changed from req.user.id
+    let referral = await Referral.findOne({ referrerId: req.user.id });
 
     if (!referral) {
       const code = await generateReferralCode();
       referral = await Referral.create({
-        referrerId: req.user.userId,
+        referrerId: req.user.id,
         code,
         referredUsers: [],
         totalBonus: 0,
@@ -166,7 +166,7 @@ const getReferralLink = async (req, res) => {
 // Get referral statistics
 const getReferralStats = async (req, res) => {
   try {
-    const referral = await Referral.findOne({ referrerId: req.user.userId }) // Changed from req.user.id
+    const referral = await Referral.findOne({ referrerId: req.user.id })
       .populate('referredUsers.userId', 'username createdAt');
 
     if (!referral) {
@@ -186,7 +186,7 @@ const getReferralStats = async (req, res) => {
         id: entry.userId._id,
         username: entry.userId.username || 'N/A',
         signupDate: entry.userId.createdAt,
-        bonusEarned: entry.bonusEarned || 0, // Dynamic based on deposits
+        bonusEarned: entry.bonusEarned || 0,
       })),
     };
 
@@ -200,7 +200,7 @@ const getReferralStats = async (req, res) => {
 // Withdraw referral bonus
 const withdrawReferralBonus = async (req, res) => {
   try {
-    const referral = await Referral.findOne({ referrerId: req.user.userId }); // Changed from req.user.id
+    const referral = await Referral.findOne({ referrerId: req.user.id });
     if (!referral) {
       return res.status(404).json({ error: 'Referral data not found' });
     }
@@ -210,7 +210,7 @@ const withdrawReferralBonus = async (req, res) => {
       return res.status(400).json({ error: 'No available bonus to withdraw' });
     }
 
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
