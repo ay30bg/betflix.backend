@@ -488,8 +488,8 @@ const sendEmail = require('../utils/sendEmail');
 
 // Generate a unique 8-digit numeric referral code
 const generateReferralCode = async () => {
-  const min = 10000000; // 00000000
-  const max = 99999999; // 99999999
+  const min = 10000000;
+  const max = 99999999;
   let code;
   let isUnique = false;
 
@@ -527,7 +527,7 @@ const signup = async (req, res) => {
     }
 
     const verificationCode = generateVerificationCode();
-    const verificationCodeExpires = Date.now() + 60 * 60 * 1000; // 1 hour
+    const verificationCodeExpires = Date.now() + 60 * 60 * 1000;
 
     const user = new User({
       username,
@@ -619,23 +619,8 @@ const signup = async (req, res) => {
   }
 };
 
-// Middleware to authenticate JWT
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ error: 'Access denied: No token provided' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    console.error('Token verification error:', err);
-    res.status(403).json({ error: 'Invalid or expired token' });
-  }
-};
+// Middleware to authenticate JWT (replaced by authMiddleware.js)
+// const authenticateToken = (req, res, next) => { ... }; // Removed
 
 const verifyEmail = async (req, res) => {
   const { email, code } = req.body;
@@ -689,7 +674,7 @@ const resendVerification = async (req, res) => {
     }
 
     const verificationCode = generateVerificationCode();
-    const verificationCodeExpires = Date.now() + 60 * 60 * 1000; // 1 hour
+    const verificationCodeExpires = Date.now() + 60 * 60 * 1000;
     user.verificationCode = verificationCode;
     user.verificationCodeExpires = verificationCodeExpires;
     await user.save();
@@ -797,7 +782,7 @@ const adminSignup = async (req, res) => {
     });
     console.log('Admin created:', { id: admin._id, email: admin.email });
 
-    const token = jwt.sign({ adminId: admin._id, role: 'admin' }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ userId: admin._id, role: 'admin' }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
 
@@ -814,7 +799,7 @@ const adminSignup = async (req, res) => {
 const adminLogin = async (req, res) => {
   const { email, password } = req.body;
 
-  console.log('Admin login attempt:', { email, paymentUrl: '****' });
+  console.log('Admin login attempt:', { email, password: '****' });
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
@@ -836,7 +821,7 @@ const adminLogin = async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ adminId: admin._id, role: 'admin' }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ userId: admin._id, role: 'admin' }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
 
@@ -885,7 +870,7 @@ const forgotPassword = async (req, res) => {
       <body style="font-family: Arial, sans-serif; color: #1f2937;">
         <h2 style="color: #1e40af;">Betflix Password Reset</h2>
         <p>You requested a password reset. Click the button below to reset your password. This link expires in 1 hour.</p>
-        <a href="${resetLink}" style="display: inline-block; padding: 12px 24px; background-color: #1e40af; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Reset Password</a>
+        <a href="${resetLink}" style="display: inline-block; padding: 12 Olimp, color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Reset Password</a>
         <p>If the button doesn't work, copy and paste this link into your browser:</p>
         <p><a href="${resetLink}" style="color: #3b82f6;">${resetLink}</a></p>
         <p>If you did not request this, please ignore this email.</p>
@@ -950,5 +935,5 @@ module.exports = {
   adminLogin,
   verifyEmail,
   resendVerification,
-  authenticateToken,
+  // authenticateToken removed, using authMiddleware.js
 };
