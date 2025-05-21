@@ -519,6 +519,7 @@ exports.getBetResult = async (req, res) => {
     const roundDuration = 120 * 1000;
     console.log(`[${new Date().toISOString()}] Fetching bet result:`, { period, userId });
 
+    // Validate period format
     const periodMatch = period.match(/^round-(\d+)$/);
     if (!periodMatch) {
       console.error(`[${new Date().toISOString()}] Invalid period format: ${period}`);
@@ -533,14 +534,17 @@ exports.getBetResult = async (req, res) => {
       });
     }
 
+    // Fetch the user's bet
     const bet = await Bet.findOne({ userId, period });
     if (!bet) {
       console.error(`[${new Date().toISOString()}] Bet not found:`, { userId, period });
       return res.status(404).json({ error: 'Bet not found for this round' });
     }
 
+    // Validate bet type and value
     const validBetTypes = ['color', 'number'];
     const validColors = ['Green', 'Red'];
+    const validNumbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
     if (!validBetTypes.includes(bet.type)) {
       console.error(`[${new Date().toISOString()}] Invalid bet type:`, { betId: bet._id, type: bet.type });
       return res.status(400).json({ error: 'Invalid bet type' });
@@ -549,11 +553,12 @@ exports.getBetResult = async (req, res) => {
       console.error(`[${new Date().toISOString()}] Invalid color value:`, { betId: bet._id, value: bet.value });
       return res.status(400).json({ error: 'Invalid color value' });
     }
-    if (bet.type === 'number' && !/^\d$/.test(bet.value)) {
+    if (bet.type === 'number' && !validNumbers.includes(bet.value)) {
       console.error(`[${new Date().toISOString()}] Invalid number value:`, { betId: bet._id, value: bet.value });
       return res.status(400).json({ error: 'Invalid number value' });
     }
 
+    // Check if bet is already finalized
     if (bet.status === 'finalized') {
       console.log(`[${new Date().toISOString()}] Returning existing bet result:`, {
         betId: bet._id,
@@ -564,6 +569,7 @@ exports.getBetResult = async (req, res) => {
       return res.json({ bet, balance: user ? user.balance : null });
     }
 
+    // Fetch the round
     const round = await Round.findOne({ period });
     if (!round) {
       const session = await Bet.startSession();
@@ -621,6 +627,102 @@ exports.getBetResult = async (req, res) => {
       }
     }
 
+    // Check if round has expired and result is not manually set by an admin
+    if (round.expiresAt < new Date() && !round.isManuallySet) {
+      // Aggregate bets for the period to find total stakes per number and color
+      const bets = await Bet.aggregate([
+        { $match: { period, status: 'pending', type: { $in: ['color', 'number'] } } },
+        {
+          $group: {
+            _id: { type: '$type', value: '$value' },
+            totalStake: { $sum: '$amount' },
+          },
+        },
+      ]);
+
+      // Initialize stakes for numbers (color stakes for logging only)
+      const numberStakes = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0, '8': 0, '9': 0 };
+      const colorStakes = { Green: 0, Red: 0 }; // For logging purposes
+      bets.forEach(({ _id, totalStake }) => {
+        if (_id.type === 'number' && validNumbers.includes(_id.value)) {
+          numberStakes[_id.value] = totalStake;
+        } else if (_id.type === 'color' && validColors.includes(_id.value)) {
+          colorStakes[_id.value] = totalStake;
+        }
+      });
+
+      // Determine the number with the lowest stake
+      let resultNumber;
+      const minNumberStake = Math.min(...Object.values(numberStakes));
+      const minStakeNumbers = Object.keys(numberStakes).filter(
+        (num) => numberStakes[num] === minNumberStake
+      );
+      if (minNumberStake === 0 && minStakeNumbers.length === validNumbers.length) {
+        // No number bets, use pre-set resultNumber
+        resultNumber = round.resultNumber;
+      } else {
+        // Choose a random number from those with the lowest stake
+        resultNumber = parseInt(
+          minStakeNumbers[Math.floor(Math.random() * minStakeNumbers.length)]
+        );
+      }
+
+      // Derive resultColor from resultNumber to maintain consistency
+      const resultColor = resultNumber % 2 === 0 ? 'Green' : 'Red';
+
+      // Update round if resultNumber or resultColor has changed
+      const previousResultNumber = round.resultNumber;
+      const previousResultColor = round.resultColor;
+      let updated = false;
+      if (round.resultNumber !== resultNumber || round.resultColor !== resultColor) {
+        round.resultNumber = resultNumber;
+        round.resultColor = resultColor;
+        round.isManuallySet = true; // Mark as set by the system
+        round.updatedAt = new Date();
+        await round.save();
+        updated = true;
+      }
+
+      console.log(
+        updated
+          ? `[${new Date().toISOString()}] Overrode round result:`
+          : `[${new Date().toISOString()}] Round result unchanged:`,
+        {
+          period,
+          previousResultNumber,
+          newResultNumber: resultNumber,
+          previousResultColor,
+          newResultColor: resultColor,
+          numberStakes,
+          colorStakes,
+          serverSeed: round.serverSeed,
+        }
+      );
+    } else if (round.isManuallySet) {
+      console.log(`[${new Date().toISOString()}] Round result not overridden (manually set by admin):`, {
+        period,
+        resultNumber: round.resultNumber,
+        resultColor: round.resultColor,
+        serverSeed: round.serverSeed,
+      });
+    } else {
+      console.log(`[${new Date().toISOString()}] Round not expired yet:`, {
+        period,
+        expiresAt: round.expiresAt,
+        resultNumber: round.resultNumber,
+        resultColor: round.resultColor,
+        serverSeed: round.serverSeed,
+      });
+      return res.json({
+        bet,
+        balance: (await User.findById(userId).select('balance')).balance,
+        status: 'pending',
+        roundStatus: 'active',
+        roundExpiresAt: round.expiresAt,
+      });
+    }
+
+    // Process the bet result
     const { resultNumber, resultColor } = round;
     let won = false;
     let payout = 0;
@@ -642,6 +744,7 @@ exports.getBetResult = async (req, res) => {
       resultNumber,
       resultColor,
       isManuallySet: round.isManuallySet,
+      serverSeed: round.serverSeed,
     });
 
     const session = await Bet.startSession();
@@ -724,7 +827,10 @@ exports.getCurrentRound = async (req, res) => {
     res.json({
       period,
       expiresAt,
-      result: round ? { resultNumber: round.resultNumber, resultColor: round.resultColor } : null,
+      result: {
+        resultNumber: round.expiresAt < new Date() ? round.resultNumber : null,
+        resultColor: round.expiresAt < new Date() ? round.resultColor : null,
+      },
     });
   } catch (err) {
     console.error(`[${new Date().toISOString()}] Error in getCurrentRound:`, err.message, err.stack);
