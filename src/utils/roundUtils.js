@@ -136,25 +136,42 @@ async function calculateRoundResult(period) {
       resultColor = colorStakes.green <= colorStakes.red ? 'Green' : 'Red';
     }
 
-    // Determine resultNumber
+    // Determine resultNumber based on resultColor
     let resultNumber;
+    // Define valid numbers based on color
+    const validNumbers = resultColor === 'Green'
+      ? [2, 4, 6, 8] // Even numbers for Green (0 excluded as it's odd)
+      : [0, 1, 3, 5, 7, 9]; // Odd numbers for Red (including 0)
+
     if (numberBets.length === 0) {
-      resultNumber = Math.floor(Math.random() * 10);
-      console.warn(`[${new Date().toISOString()}] No valid number bets for period ${period}, selected random number: ${resultNumber}`);
+      // No number bets, select a random valid number
+      resultNumber = validNumbers[Math.floor(Math.random() * validNumbers.length)];
+      console.warn(`[${new Date().toISOString()}] No valid number bets for period ${period}, selected random number: ${resultNumber} (for ${resultColor})`);
     } else {
-      // Find the number with the lowest stake
-      const minStake = Math.min(...Object.values(numberStakes).filter(val => val > 0));
-      const minStakeNumbers = Object.keys(numberStakes)
-        .filter(num => numberStakes[num] === minStake || (!numberStakes[num] && minStake === Infinity))
-        .map(num => parseInt(num));
-      // If no stakes (all numbers unbetted), include all numbers (0–9)
+      // Find the number with the lowest stake among valid numbers
+      let minStake = Infinity;
+      let minStakeNumbers = [];
+
+      validNumbers.forEach(num => {
+        const stake = numberStakes[num] || 0;
+        if (stake < minStake) {
+          minStake = stake;
+          minStakeNumbers = [num];
+        } else if (stake === minStake) {
+          minStakeNumbers.push(num);
+        }
+      });
+
+      // If no bets on valid numbers, include all valid numbers with zero stake
       if (minStake === Infinity) {
-        minStakeNumbers.push(...Array.from({ length: 10 }, (_, i) => i).filter(i => !numberStakes[i]));
+        minStakeNumbers = validNumbers;
       }
+
       // Pick a random number from those with the lowest stake
       resultNumber = minStakeNumbers[Math.floor(Math.random() * minStakeNumbers.length)];
       console.log(`[${new Date().toISOString()}] Number stakes for period ${period}:`, {
         stakes: numberStakes,
+        validNumbers,
         minStakeNumbers,
         selectedNumber: resultNumber,
       });
