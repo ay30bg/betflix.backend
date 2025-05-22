@@ -709,52 +709,6 @@ const resendVerification = async (req, res) => {
   }
 };
 
-// const login = async (req, res) => {
-//   const { email, password } = req.body;
-
-//   console.log('Login attempt:', { email, password: '****' });
-
-//   if (!email || !password) {
-//     return res.status(400).json({ error: 'Email and password are required' });
-//   }
-
-//   try {
-//     const normalizedEmail = email.trim().toLowerCase();
-//     console.log('Normalized email:', normalizedEmail);
-
-//     const user = await User.findOne({ email: normalizedEmail });
-//     if (!user) {
-//       console.log('User not found for email:', normalizedEmail);
-//       return res.status(401).json({ error: 'Invalid credentials' });
-//     }
-
-//     const isMatch = await user.comparePassword(password);
-//     if (!isMatch) {
-//       console.log('Password mismatch for user:', normalizedEmail);
-//       return res.status(401).json({ error: 'Invalid credentials' });
-//     }
-
-//     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-//       expiresIn: '1h',
-//     });
-
-//     res.json({
-//       token,
-//       user: {
-//         id: user._id,
-//         username: user.username,
-//         email: user.email,
-//         balance: user.balance,
-//         status: user.status,
-//         isVerified: user.isVerified,
-//       },
-//     });
-//   } catch (err) {
-//     console.error('Login error:', err);
-//     res.status(500).json({ error: 'Failed to log in' });
-//   }
-// };
-
 const login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -777,7 +731,7 @@ const login = async (req, res) => {
     // Check if user is banned
     if (user.status === 'banned') {
       console.log('Login attempt by banned user:', normalizedEmail);
-      return res.status(403).json({ error: 'Account is banned. Please contact support.' });
+      return res.status(403).json({ error: 'Your account is banned, contact support@betflixbets.vip' });
     }
 
     const isMatch = await user.comparePassword(password);
