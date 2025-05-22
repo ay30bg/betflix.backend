@@ -604,7 +604,8 @@ async function getJwtToken() {
       `${nowpaymentsConfig.baseUrl}/auth`,
       {
         api_key: nowpaymentsConfig.apiKey,
-        email: nowpaymentsConfig.email // Add email
+        email: nowpaymentsConfig.email,
+        password: nowpaymentsConfig.password // Add password
       },
       { headers: { 'Content-Type': 'application/json' } }
     );
@@ -614,6 +615,7 @@ async function getJwtToken() {
     throw new Error('Could not authenticate with NOWPayments');
   }
 }
+
 // Initiate Crypto Withdrawal
 const initiateCryptoWithdrawal = async (req, res) => {
   const { amount, cryptoCurrency, walletAddress, network, withdrawalPassword } = req.body;
