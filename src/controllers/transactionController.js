@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Referral = require('../models/Referral');
 const Transaction = require('../models/Transaction');
+const WithdrawalRequest = require('../models/WithdrawalRequest');
 const axios = require('axios');
 const nowpaymentsConfig = require('../config/nowpayments');
 
