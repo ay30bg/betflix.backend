@@ -603,11 +603,15 @@ async function getJwtToken() {
     const response = await axios.post(
       `${nowpaymentsConfig.baseUrl}/auth`,
       {
-        api_key: nowpaymentsConfig.apiKey,
         email: nowpaymentsConfig.email,
-        password: nowpaymentsConfig.password // Add password
+        password: nowpaymentsConfig.password
       },
-      { headers: { 'Content-Type': 'application/json' } }
+      {
+        headers: {
+          'x-api-key': nowpaymentsConfig.apiKey,
+          'Content-Type': 'application/json'
+        }
+      }
     );
     return response.data.token; // Adjust if token is in a different field (e.g., response.data.jwt)
   } catch (error) {
@@ -699,7 +703,7 @@ const initiateCryptoWithdrawal = async (req, res) => {
       {
         headers: {
           'x-api-key': nowpaymentsConfig.apiKey,
-          'Authorization': `Bearer ${jwtToken}`, // Added JWT token
+          'Authorization': `Bearer ${jwtToken}`,
           'Content-Type': 'application/json',
         },
       }
