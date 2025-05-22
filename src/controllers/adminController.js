@@ -193,10 +193,34 @@ const getDashboard = async (req, res) => {
   }
 };
 
-// Get All Users (unchanged)
+// // Get All Users (unchanged)
+// const getAllUsers = async (req, res) => {
+//   try {
+//     const users = await User.find().select('-password');
+//     res.json(users);
+//   } catch (err) {
+//     console.error('Error fetching users:', err);
+//     res.status(500).json({ error: 'Server error' });
+//   }
+// };
+
+// Get All Users
 const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find().select('-password');
+    const { search = '' } = req.query;
+
+    // Build query for searching
+    const query = search
+      ? {
+          $or: [
+            { username: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } },
+          ],
+        }
+      : {};
+
+    const users = await User.find(query).select('-password');
+    console.log(`Fetched users with search term "${search}": ${users.length} found`);
     res.json(users);
   } catch (err) {
     console.error('Error fetching users:', err);
