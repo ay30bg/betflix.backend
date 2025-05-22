@@ -601,17 +601,19 @@ const initiateCryptoDeposit = async (req, res) => {
 async function getJwtToken() {
   try {
     const response = await axios.post(
-      `${nowpaymentsConfig.baseUrl}/auth`, // Adjust if endpoint is different
-      { api_key: nowpaymentsConfig.apiKey },
+      `${nowpaymentsConfig.baseUrl}/auth`,
+      {
+        api_key: nowpaymentsConfig.apiKey,
+        email: nowpaymentsConfig.email // Add email
+      },
       { headers: { 'Content-Type': 'application/json' } }
     );
     return response.data.token; // Adjust if token is in a different field (e.g., response.data.jwt)
   } catch (error) {
-    console.error('Failed to get JWT token:', error.response?.data || error.message);
+    console.error('Failed to get JWT token:', JSON.stringify(error.response?.data, null, 2));
     throw new Error('Could not authenticate with NOWPayments');
   }
 }
-
 // Initiate Crypto Withdrawal
 const initiateCryptoWithdrawal = async (req, res) => {
   const { amount, cryptoCurrency, walletAddress, network, withdrawalPassword } = req.body;
