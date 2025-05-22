@@ -597,6 +597,21 @@ const initiateCryptoDeposit = async (req, res) => {
   }
 };
 
+// Function to get JWT token from NOWPayments
+async function getJwtToken() {
+  try {
+    const response = await axios.post(
+      `${nowpaymentsConfig.baseUrl}/auth`, // Adjust if endpoint is different
+      { api_key: nowpaymentsConfig.apiKey },
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    return response.data.token; // Adjust if token is in a different field (e.g., response.data.jwt)
+  } catch (error) {
+    console.error('Failed to get JWT token:', error.response?.data || error.message);
+    throw new Error('Could not authenticate with NOWPayments');
+  }
+}
+
 // Initiate Crypto Withdrawal
 const initiateCryptoWithdrawal = async (req, res) => {
   const { amount, cryptoCurrency, walletAddress, network, withdrawalPassword } = req.body;
@@ -664,6 +679,10 @@ const initiateCryptoWithdrawal = async (req, res) => {
       : normalizedCrypto.toLowerCase();
     console.log('Mapped payCurrency:', payCurrency);
 
+    // Get JWT token
+    const jwtToken = await getJwtToken();
+
+    // Send withdrawal request with JWT token
     const response = await axios.post(
       `${nowpaymentsConfig.baseUrl}/payout`,
       {
@@ -676,10 +695,17 @@ const initiateCryptoWithdrawal = async (req, res) => {
       {
         headers: {
           'x-api-key': nowpaymentsConfig.apiKey,
+          'Authorization': `Bearer ${jwtToken}`, // Added JWT token
           'Content-Type': 'application/json',
         },
       }
     );
+
+    console.log('Withdrawal request headers:', {
+      'x-api-key': nowpaymentsConfig.apiKey,
+      'Authorization': `Bearer ${jwtToken}`,
+      'Content-Type': 'application/json',
+    });
 
     const { payout_id } = response.data;
 
