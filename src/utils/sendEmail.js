@@ -60,7 +60,7 @@ const sendEmail = async (to, subject, html) => {
 
     // Send email
     const info = await transporter.sendMail({
-      from: `"Betflix Password Reset" <${process.env.EMAIL_USER}>`, // Must match EMAIL_USER
+      from: `"Betflix Support" <${process.env.EMAIL_USER}>`, // Must match EMAIL_USER
       to, // Recipient email address
       subject, // Email subject
       html, // HTML content
