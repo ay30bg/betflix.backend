@@ -980,8 +980,6 @@ const generateVerificationCode = () => {
 const signup = async (req, res) => {
   const { username, email, password, referralCode } = req.body;
 
-ස
-
   console.log('Signup attempt:', { username, email, password: '****', referralCode });
 
   if (!username || !email || !password) {
@@ -1023,6 +1021,7 @@ const signup = async (req, res) => {
           console.warn('Referral code not found:', referralCode);
         }
       }
+    }
 
     await user.save();
     console.log('User created:', {
@@ -1177,8 +1176,7 @@ const resendVerification = async (req, res) => {
 const login = async (req, res) => {
   const { email, password } = req.body;
 
-  console.l
-og('Login attempt:', { email, password: '****' });
+  console.log('Login attempt:', { email, password: '****' });
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
@@ -1288,8 +1286,6 @@ const adminLogin = async (req, res) => {
     }
 
     const isMatch = await admin.comparePassword(password);
-   მო�
-
     if (!isMatch) {
       console.log('Password mismatch for admin:', normalizedEmail);
       return res.status(401).json({ error: 'Invalid credentials' });
