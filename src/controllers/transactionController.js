@@ -92,35 +92,12 @@ const initiateCryptoDeposit = async (req, res) => {
   }
 };
 
-// // Function to get JWT token from NOWPayments
-// async function getJwtToken() {
-//   try {
-//     const response = await axios.post(
-//       `${nowpaymentsConfig.baseUrl}/auth`,
-//       {
-//         email: nowpaymentsConfig.email,
-//         password: nowpaymentsConfig.password
-//       },
-//       {
-//         headers: {
-//           'x-api-key': nowpaymentsConfig.apiKey,
-//           'Content-Type': 'application/json'
-//         }
-//       }
-//     );
-//     return response.data.token; // Adjust if token is in a different field (e.g., response.data.jwt)
-//   } catch (error) {
-//     console.error('Failed to get JWT token:', JSON.stringify(error.response?.data, null, 2));
-//     throw new Error('Could not authenticate with NOWPayments');
-//   }
-// }
-
-// // Initiate Crypto Withdrawal
+// // Initiate Manual Crypto Withdrawal
 // const initiateCryptoWithdrawal = async (req, res) => {
 //   const { amount, cryptoCurrency, walletAddress, network, withdrawalPassword } = req.body;
 //   const userId = req.user.id; // From auth middleware
 
-//   console.log('Withdrawal request:', {
+//   console.log('Manual withdrawal request:', {
 //     amount,
 //     cryptoCurrency,
 //     walletAddress,
@@ -177,88 +154,75 @@ const initiateCryptoDeposit = async (req, res) => {
 //       return res.status(400).json({ error: 'Insufficient balance' });
 //     }
 
-//     const payCurrency = normalizedCrypto === 'USDT'
-//       ? (network === 'TRC20' ? 'usdttrc20' : network === 'BEP20' ? 'usdtbsc' : 'usdtton')
-//       : normalizedCrypto.toLowerCase();
-//     console.log('Mapped payCurrency:', payCurrency);
-
-//     // Get JWT token
-//     const jwtToken = await getJwtToken();
-
-//     // Send withdrawal request with JWT token
-//     const response = await axios.post(
-//       `${nowpaymentsConfig.baseUrl}/payout`,
-//       {
-//         amount,
-//         currency: payCurrency,
-//         address: walletAddress,
-//         order_id: `${userId}_${Date.now()}`,
-//         ipn_callback_url: `${process.env.BASE_URL}/api/transactions/webhook`,
-//       },
-//       {
-//         headers: {
-//           'x-api-key': nowpaymentsConfig.apiKey,
-//           'Authorization': `Bearer ${jwtToken}`,
-//           'Content-Type': 'application/json',
+//     // Create withdrawal request
+//     const withdrawalRequest = await WithdrawalRequest.create(
+//       [
+//         {
+//           userId,
+//           username: user.username,
+//           amount,
+//           cryptoCurrency: normalizedCrypto,
+//           walletAddress,
+//           network: normalizedCrypto === 'USDT' ? network : null,
+//           withdrawalPassword,
+//           status: 'pending',
 //         },
-//       }
+//       ],
+//       { session }
 //     );
 
-//     console.log('Withdrawal request headers:', {
-//       'x-api-key': nowpaymentsConfig.apiKey,
-//       'Authorization': `Bearer ${jwtToken}`,
-//       'Content-Type': 'application/json',
-//     });
-
-//     const { payout_id } = response.data;
-
+//     // Deduct amount from user balance (optional: you might want to deduct only after admin approval)
 //     const updatedUser = await User.findByIdAndUpdate(
 //       userId,
 //       { $inc: { balance: -amount }, updatedAt: Date.now() },
 //       { new: true, select: 'balance', session }
 //     );
 
-//     await Transaction.create(
-//       [
-//         {
-//           userId,
-//           amount,
-//           type: 'crypto-withdrawal',
-//           status: 'pending',
-//           cryptoCurrency: normalizedCrypto,
-//           paymentId: payout_id,
-//           walletAddress,
-//           network,
-//         },
-//       ],
-//       { session }
-//     );
+//     // Here, you can add logic to notify admins (e.g., via WebSocket, email, or dashboard update)
+//     console.log('Admin notification: New withdrawal request', {
+//       username: user.username,
+//       amount,
+//       cryptoCurrency: normalizedCrypto,
+//       walletAddress,
+//       network: normalizedCrypto === 'USDT' ? network : null,
+//     });
+
+//     // Example: You could emit a WebSocket event to the admin dashboard
+//     // Assuming you have a WebSocket server (e.g., using socket.io)
+//     // const io = req.app.get('io');
+//     // io.to('admin_room').emit('newWithdrawalRequest', {
+//     //   username: user.username,
+//     //   amount,
+//     //   cryptoCurrency: normalizedCrypto,
+//     //   walletAddress,
+//     //   network: normalizedCrypto === 'USDT' ? network : null,
+//     //   requestId: withdrawalRequest[0]._id,
+//     // });
 
 //     await session.commitTransaction();
 //     res.json({
-//       message: `Initiated withdrawal of ${amount} ${normalizedCrypto} to ${walletAddress}`,
+//       message: `Withdrawal request of ${amount} ${normalizedCrypto} to ${walletAddress} submitted for admin review`,
 //       balance: updatedUser.balance,
 //       transactionDetails: {
 //         amount,
 //         cryptoCurrency: normalizedCrypto,
 //         walletAddress,
-//         network: normalizedCrypto === 'USDT' ? network : undefined,
+//         network: normalizedCrypto === 'USDT' ? network : null,
+//         status: 'pending',
 //       },
 //     });
 //   } catch (err) {
 //     await session.abortTransaction();
-//     console.error('Crypto withdrawal error:', JSON.stringify(err.response?.data, null, 2));
-//     const errorMessage = err.response?.data?.message || 'Failed to initiate crypto withdrawal';
-//     res.status(err.response?.status || 500).json({
-//       error: errorMessage,
-//       details: err.response?.data || err.message,
+//     console.error('Manual withdrawal error:', err.message);
+//     res.status(500).json({
+//       error: 'Failed to initiate withdrawal request',
+//       details: err.message,
 //     });
 //   } finally {
 //     session.endSession();
 //   }
 // };
 
-// Initiate Manual Crypto Withdrawal
 const initiateCryptoWithdrawal = async (req, res) => {
   const { amount, cryptoCurrency, walletAddress, network, withdrawalPassword } = req.body;
   const userId = req.user.id; // From auth middleware
@@ -294,6 +258,7 @@ const initiateCryptoWithdrawal = async (req, res) => {
   session.startTransaction();
 
   try {
+    // Fetch user within the session
     const user = await User.findById(userId).session(session);
     if (!user) {
       await session.abortTransaction();
@@ -320,6 +285,21 @@ const initiateCryptoWithdrawal = async (req, res) => {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
 
+    // Check for recent withdrawal requests (within last 24 hours)
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentWithdrawal = await WithdrawalRequest.findOne({
+      userId,
+      createdAt: { $gte: oneDayAgo },
+      status: { $in: ['pending', 'approved'] }, // Only count pending or approved withdrawals
+    }).session(session);
+
+    if (recentWithdrawal) {
+      await session.abortTransaction();
+      return res.status(429).json({
+        error: 'Withdrawal limit reached. You can only request one withdrawal per day.',
+      });
+    }
+
     // Create withdrawal request
     const withdrawalRequest = await WithdrawalRequest.create(
       [
@@ -332,29 +312,31 @@ const initiateCryptoWithdrawal = async (req, res) => {
           network: normalizedCrypto === 'USDT' ? network : null,
           withdrawalPassword,
           status: 'pending',
+          createdAt: Date.now(), // Explicitly set for clarity
+          updatedAt: Date.now(),
         },
       ],
       { session }
     );
 
-    // Deduct amount from user balance (optional: you might want to deduct only after admin approval)
+    // Deduct amount from user balance (consider moving this to admin approval if preferred)
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { $inc: { balance: -amount }, updatedAt: Date.now() },
       { new: true, select: 'balance', session }
     );
 
-    // Here, you can add logic to notify admins (e.g., via WebSocket, email, or dashboard update)
+    // Notify admins (e.g., via WebSocket, email, or dashboard update)
     console.log('Admin notification: New withdrawal request', {
       username: user.username,
       amount,
       cryptoCurrency: normalizedCrypto,
       walletAddress,
       network: normalizedCrypto === 'USDT' ? network : null,
+      requestId: withdrawalRequest[0]._id,
     });
 
-    // Example: You could emit a WebSocket event to the admin dashboard
-    // Assuming you have a WebSocket server (e.g., using socket.io)
+    // Example: WebSocket notification (uncomment if using socket.io)
     // const io = req.app.get('io');
     // io.to('admin_room').emit('newWithdrawalRequest', {
     //   username: user.username,
@@ -375,6 +357,7 @@ const initiateCryptoWithdrawal = async (req, res) => {
         walletAddress,
         network: normalizedCrypto === 'USDT' ? network : null,
         status: 'pending',
+        requestId: withdrawalRequest[0]._id,
       },
     });
   } catch (err) {
@@ -388,7 +371,6 @@ const initiateCryptoWithdrawal = async (req, res) => {
     session.endSession();
   }
 };
-
 
 // Webhook for Crypto Payments and Withdrawals
 const handleWebhook = async (req, res) => {
