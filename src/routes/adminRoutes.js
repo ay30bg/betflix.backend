@@ -1,7 +1,6 @@
 // const express = require('express');
 // const router = express.Router();
 // const adminController = require('../controllers/adminController');
-// // const { getRoundResult } = require('../controllers/betController');
 // const adminAuthMiddleware = require('../middleware/adminAuth');
 
 // // Public routes
@@ -13,10 +12,13 @@
 // // Protected routes (require admin authentication)
 // router.get('/dashboard', adminAuthMiddleware, adminController.getDashboard);
 // router.get('/users', adminAuthMiddleware, adminController.getAllUsers);
-// // router.get('/rounds/result/:period', authenticateAdminToken, getRoundResult);
 // router.put('/users/:userId', adminAuthMiddleware, adminController.editUser);
 // router.put('/users/:userId/ban', adminAuthMiddleware, adminController.toggleBanUser);
 // router.delete('/users/:userId', adminAuthMiddleware, adminController.deleteUser);
+
+// // Withdrawal request routes
+// router.get('/withdrawal-requests', adminAuthMiddleware, adminController.getPendingWithdrawalRequests);
+// router.post('/update-withdrawal', adminAuthMiddleware, adminController.updateWithdrawalRequest);
 
 // module.exports = router;
 
@@ -37,9 +39,8 @@ router.get('/users', adminAuthMiddleware, adminController.getAllUsers);
 router.put('/users/:userId', adminAuthMiddleware, adminController.editUser);
 router.put('/users/:userId/ban', adminAuthMiddleware, adminController.toggleBanUser);
 router.delete('/users/:userId', adminAuthMiddleware, adminController.deleteUser);
-
-// Withdrawal request routes
 router.get('/withdrawal-requests', adminAuthMiddleware, adminController.getPendingWithdrawalRequests);
 router.post('/update-withdrawal', adminAuthMiddleware, adminController.updateWithdrawalRequest);
+router.get('/total-revenue', adminAuthMiddleware, adminController.getTotalRevenue); // New route
 
 module.exports = router;
