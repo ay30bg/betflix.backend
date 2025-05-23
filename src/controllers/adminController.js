@@ -330,7 +330,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const mongoose = require('mongoose'); // Add mongoose for transactions
+const mongoose = require('mongoose'); 
+const axios = require('axios');
 const Admin = require('../models/Admin');
 const User = require('../models/User');
 const WithdrawalRequest = require('../models/WithdrawalRequest'); // Add WithdrawalRequest model
@@ -347,6 +348,10 @@ if (!process.env.JWT_SECRET) {
 if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
   console.error('Error: EMAIL_USER or EMAIL_PASS is not defined in environment variables');
   throw new Error('Email configuration is required');
+}
+if (!process.env.NOWPAYMENTS_API_KEY || !process.env.NOWPAYMENTS_API_URL) {
+  console.error('Error: NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_URL is not defined');
+  throw new Error('NOWPayments configuration is required');
 }
 
 // Configure nodemailer transporter
@@ -606,6 +611,35 @@ const toggleBanUser = async (req, res) => {
   }
 };
 
+// New endpoint: Get Total Revenue from NOWPayments
+const getTotalRevenue = async (req, res) => {
+  try {
+    // Fetch balance from NOWPayments
+    const response = await axios.get(`${process.env.NOWPAYMENTS_API_URL}/balance`, {
+      headers: {
+        'x-api-key': process.env.NOWPAYMENTS_API_KEY,
+      },
+    });
+
+    // Check if response contains balance data
+    if (response.data && response.data.currencies) {
+      let totalBalance = 0;
+      // Sum balances across all currencies (assuming they're in a common unit or USD for simplicity)
+      for (const currency of response.data.currencies) {
+        totalBalance += parseFloat(currency.balance || 0);
+      }
+
+      console.log(`Admin ${req.admin.id} fetched total revenue: ${totalBalance}`);
+      res.json({ totalRevenue: totalBalance.toFixed(2) });
+    } else {
+      throw new Error('Invalid response from NOWPayments');
+    }
+  } catch (err) {
+    console.error('Error fetching total revenue:', err.message);
+    res.status(500).json({ error: 'Failed to fetch total revenue' });
+  }
+};
+
 // Delete User
 const deleteUser = async (req, res) => {
   const { userId } = req.params;
@@ -691,4 +725,5 @@ module.exports = {
   deleteUser,
   getPendingWithdrawalRequests,
   updateWithdrawalRequest,
+  getTotalRevenue,
 };
