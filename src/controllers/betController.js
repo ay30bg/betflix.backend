@@ -403,6 +403,115 @@ exports.getBetStats = async (req, res) => {
   }
 };
 
+// exports.placeBet = async (req, res) => {
+//   try {
+//     const { type, value, amount, clientSeed } = req.body;
+//     console.log(`[${new Date().toISOString()}] Received bet:`, { userId: req.user.id, type, value, amount, clientSeed });
+
+//     const user = await User.findById(req.user.id);
+//     if (!user) {
+//       console.error(`[${new Date().toISOString()}] User not found: ${req.user.id}`);
+//       return res.status(404).json({ error: 'User not found' });
+//     }
+
+//     if (!Number.isFinite(amount) || amount <= 0) {
+//       console.error(`[${new Date().toISOString()}] Invalid bet amount: ${amount}`);
+//       return res.status(400).json({ error: 'Invalid bet amount' });
+//     }
+
+//     if (amount > user.balance) {
+//       console.error(`[${new Date().toISOString()}] Insufficient balance: ${amount} > ${user.balance}`);
+//       return res.status(400).json({ error: 'Insufficient balance' });
+//     }
+
+//     if (!clientSeed || typeof clientSeed !== 'string') {
+//       console.error(`[${new Date().toISOString()}] Invalid clientSeed: ${clientSeed}`);
+//       return res.status(400).json({ error: 'Invalid clientSeed' });
+//     }
+
+//     if (!['color', 'number'].includes(type)) {
+//       console.error(`[${new Date().toISOString()}] Invalid bet type: ${type}`);
+//       return res.status(400).json({ error: 'Invalid bet type' });
+//     }
+
+//     if (type === 'color' && !['Green', 'Red'].includes(value)) {
+//       console.error(`[${new Date().toISOString()}] Invalid color value: ${value}`);
+//       return res.status(400).json({ error: 'Invalid color value' });
+//     }
+
+//     if (type === 'number' && !/^\d$/.test(value)) {
+//       console.error(`[${new Date().toISOString()}] Invalid number value: ${value}`);
+//       return res.status(400).json({ error: 'Invalid number value' });
+//     }
+
+//     const roundDuration = 120 * 1000;
+//     const now = Date.now();
+//     const roundStart = Math.floor(now / roundDuration) * roundDuration;
+//     const roundEnd = roundStart + roundDuration;
+//     const period = `round-${roundStart}`;
+//     console.log(`[${new Date().toISOString()}] Round details:`, { period, roundStart, roundEnd });
+
+//     if (now > roundEnd - 10000) {
+//       console.error(`[${new Date().toISOString()}] Round ending soon: now=${now}, roundEnd=${roundEnd}`);
+//       return res.status(400).json({ error: 'Round is about to end, please wait for the next round' });
+//     }
+
+//     await createRound(period);
+
+//     const existingBet = await Bet.findOne({ userId: req.user.id, period });
+//     if (existingBet) {
+//       console.error(`[${new Date().toISOString()}] Duplicate bet detected: userId=${req.user.id}, period=${period}`);
+//       return res.status(400).json({ error: `Only one bet allowed per round (${period})` });
+//     }
+
+//     const session = await Bet.startSession();
+//     session.startTransaction();
+//     try {
+//       const newBalance = user.balance - amount;
+//       await User.findByIdAndUpdate(
+//         req.user.id,
+//         { $set: { balance: newBalance, updatedAt: new Date() } },
+//         { session }
+//       );
+
+//       const bet = new Bet({
+//         userId: req.user.id,
+//         period,
+//         type,
+//         value,
+//         amount,
+//         clientSeed,
+//         status: 'pending',
+//         createdAt: new Date(),
+//       });
+//       await bet.save({ session });
+
+//       await session.commitTransaction();
+//       console.log(`[${new Date().toISOString()}] Bet placed:`, {
+//         betId: bet._id,
+//         userId: req.user.id,
+//         period,
+//         amount,
+//         newBalance,
+//       });
+//       res.json({ bet, balance: newBalance });
+//     } catch (err) {
+//       await session.abortTransaction();
+//       console.error(`[${new Date().toISOString()}] Error in placeBet:`, {
+//         userId: req.user.id,
+//         period,
+//         error: err.message,
+//       });
+//       throw err;
+//     } finally {
+//       session.endSession();
+//     }
+//   } catch (err) {
+//     console.error(`[${new Date().toISOString()}] Error in placeBet:`, err.message, err.stack);
+//     res.status(500).json({ error: 'Server error', details: err.message });
+//   }
+// };
+
 exports.placeBet = async (req, res) => {
   try {
     const { type, value, amount, clientSeed } = req.body;
@@ -458,10 +567,11 @@ exports.placeBet = async (req, res) => {
 
     await createRound(period);
 
-    const existingBet = await Bet.findOne({ userId: req.user.id, period });
-    if (existingBet) {
-      console.error(`[${new Date().toISOString()}] Duplicate bet detected: userId=${req.user.id}, period=${period}`);
-      return res.status(400).json({ error: `Only one bet allowed per round (${period})` });
+    // Check if user has already placed bets in this round
+    const existingBets = await Bet.find({ userId: req.user.id, period });
+    if (existingBets.length >= 2) {
+      console.error(`[${new Date().toISOString()}] Bet limit exceeded: userId=${req.user.id}, period=${period}, existingBets=${existingBets.length}`);
+      return res.status(400).json({ error: `Maximum of 2 bets allowed per round (${period})` });
     }
 
     const session = await Bet.startSession();
@@ -493,6 +603,7 @@ exports.placeBet = async (req, res) => {
         period,
         amount,
         newBalance,
+        betNumber: existingBets.length + 1, // Log which bet number this is (1 or 2)
       });
       res.json({ bet, balance: newBalance });
     } catch (err) {
