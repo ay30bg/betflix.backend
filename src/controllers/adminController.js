@@ -1,10 +1,13 @@
-// // backend/admin.js
+// //backend/admin.js
 // const bcrypt = require('bcryptjs');
 // const jwt = require('jsonwebtoken');
 // const nodemailer = require('nodemailer');
 // const crypto = require('crypto');
+// const mongoose = require('mongoose'); 
+// const axios = require('axios');
 // const Admin = require('../models/Admin');
 // const User = require('../models/User');
+// const WithdrawalRequest = require('../models/WithdrawalRequest'); // Add WithdrawalRequest model
 
 // // Validate environment variables at startup
 // if (!process.env.ADMIN_KEY) {
@@ -18,6 +21,10 @@
 // if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
 //   console.error('Error: EMAIL_USER or EMAIL_PASS is not defined in environment variables');
 //   throw new Error('Email configuration is required');
+// }
+// if (!process.env.NOWPAYMENTS_API_KEY || !process.env.NOWPAYMENTS_API_URL) {
+//   console.error('Error: NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_URL is not defined');
+//   throw new Error('NOWPayments configuration is required');
 // }
 
 // // Configure nodemailer transporter
@@ -35,31 +42,26 @@
 
 //   console.log('Admin signup attempt:', { email, adminKeyProvided: !!adminKey });
 
-//   // Validate input
 //   if (!email || !password || !adminKey) {
 //     console.log('Missing required fields:', { email, passwordProvided: !!password, adminKeyProvided: !!adminKey });
 //     return res.status(400).json({ error: 'Email, password, and admin key are required' });
 //   }
 
-//   // Validate adminKey
 //   if (adminKey !== process.env.ADMIN_KEY) {
 //     console.log('Invalid admin key for email:', email);
 //     return res.status(403).json({ error: 'Invalid admin key' });
 //   }
 
 //   try {
-//     // Check if admin already exists
 //     const existingAdmin = await Admin.findOne({ email });
 //     if (existingAdmin) {
 //       console.log('Admin already exists:', { email });
 //       return res.status(400).json({ error: 'Email already in use' });
 //     }
 
-//     // Create new admin
 //     const admin = new Admin({ email, password });
 //     await admin.save();
 
-//     // Generate JWT
 //     const token = jwt.sign(
 //       { id: admin._id, role: 'admin' },
 //       process.env.JWT_SECRET,
@@ -80,7 +82,7 @@
 //   }
 // };
 
-// // Admin Login (unchanged)
+// // Admin Login
 // const loginAdmin = async (req, res) => {
 //   const { email, password } = req.body;
 
@@ -116,7 +118,7 @@
 //   }
 // };
 
-// // Forgot Password (unchanged)
+// // Forgot Password
 // const forgotPassword = async (req, res) => {
 //   const { email } = req.body;
 
@@ -151,7 +153,7 @@
 //   }
 // };
 
-// // Reset Password (unchanged)
+// // Reset Password
 // const resetPassword = async (req, res) => {
 //   const { token } = req.params;
 //   const { password } = req.body;
@@ -179,7 +181,7 @@
 //   }
 // };
 
-// // Get Admin Dashboard (unchanged)
+// // Get Admin Dashboard
 // const getDashboard = async (req, res) => {
 //   try {
 //     res.json({
@@ -193,23 +195,10 @@
 //   }
 // };
 
-// // // Get All Users (unchanged)
-// // const getAllUsers = async (req, res) => {
-// //   try {
-// //     const users = await User.find().select('-password');
-// //     res.json(users);
-// //   } catch (err) {
-// //     console.error('Error fetching users:', err);
-// //     res.status(500).json({ error: 'Server error' });
-// //   }
-// // };
-
 // // Get All Users
 // const getAllUsers = async (req, res) => {
 //   try {
 //     const { search = '' } = req.query;
-
-//     // Build query for searching
 //     const query = search
 //       ? {
 //           $or: [
@@ -228,7 +217,7 @@
 //   }
 // };
 
-// // Edit User (unchanged)
+// // Edit User
 // const editUser = async (req, res) => {
 //   const { userId } = req.params;
 //   const { username, email, balance } = req.body;
@@ -261,7 +250,7 @@
 //   }
 // };
 
-// // Ban or Unban User (unchanged)
+// // Ban or Unban User
 // const toggleBanUser = async (req, res) => {
 //   const { userId } = req.params;
 //   const { status } = req.body;
@@ -295,7 +284,36 @@
 //   }
 // };
 
-// // Delete User (unchanged)
+// // New endpoint: Get Total Revenue from NOWPayments
+// const getTotalRevenue = async (req, res) => {
+//   try {
+//     // Fetch balance from NOWPayments
+//     const response = await axios.get(`${process.env.NOWPAYMENTS_API_URL}/balance`, {
+//       headers: {
+//         'x-api-key': process.env.NOWPAYMENTS_API_KEY,
+//       },
+//     });
+
+//     // Check if response contains balance data
+//     if (response.data && response.data.currencies) {
+//       let totalBalance = 0;
+//       // Sum balances across all currencies (assuming they're in a common unit or USD for simplicity)
+//       for (const currency of response.data.currencies) {
+//         totalBalance += parseFloat(currency.balance || 0);
+//       }
+
+//       console.log(`Admin ${req.admin.id} fetched total revenue: ${totalBalance}`);
+//       res.json({ totalRevenue: totalBalance.toFixed(2) });
+//     } else {
+//       throw new Error('Invalid response from NOWPayments');
+//     }
+//   } catch (err) {
+//     console.error('Error fetching total revenue:', err.message);
+//     res.status(500).json({ error: 'Failed to fetch total revenue' });
+//   }
+// };
+
+// // Delete User
 // const deleteUser = async (req, res) => {
 //   const { userId } = req.params;
 
@@ -314,6 +332,60 @@
 //   }
 // };
 
+// // Get Withdrawal Requests
+// const getPendingWithdrawalRequests = async (req, res) => {
+//   try {
+//     const { status } = req.query; // Allow filtering by status (e.g., pending, approved, rejected)
+//     const query = status ? { status } : {};
+//     const requests = await WithdrawalRequest.find(query).populate('userId', 'email');
+//     res.json(requests);
+//   } catch (err) {
+//     console.error('Error fetching withdrawal requests:', err);
+//     res.status(500).json({ error: 'Failed to fetch withdrawal requests', details: err.message });
+//   }
+// };
+
+// // Approve or Reject Withdrawal Request
+// const updateWithdrawalRequest = async (req, res) => {
+//   const { requestId, action } = req.body;
+//   const session = await mongoose.startSession();
+//   session.startTransaction();
+
+//   try {
+//     const withdrawalRequest = await WithdrawalRequest.findById(requestId).session(session);
+//     if (!withdrawalRequest) {
+//       await session.abortTransaction();
+//       return res.status(404).json({ error: 'Withdrawal request not found' });
+//     }
+
+//     if (action === 'approve') {
+//       withdrawalRequest.status = 'approved';
+//       // Optionally, process the withdrawal via NOWPayments here
+//     } else if (action === 'reject') {
+//       withdrawalRequest.status = 'rejected';
+//       // Refund the amount to the user's balance
+//       const user = await User.findById(withdrawalRequest.userId).session(session);
+//       if (user) {
+//         user.balance += withdrawalRequest.amount;
+//         await user.save({ session });
+//       }
+//     } else {
+//       await session.abortTransaction();
+//       return res.status(400).json({ error: 'Invalid action' });
+//     }
+
+//     await withdrawalRequest.save({ session });
+//     await session.commitTransaction();
+//     res.json({ message: `Withdrawal request ${action}d successfully` });
+//   } catch (err) {
+//     await session.abortTransaction();
+//     console.error('Error updating withdrawal request:', err);
+//     res.status(500).json({ error: `Failed to ${action} withdrawal request`, details: err.message });
+//   } finally {
+//     session.endSession();
+//   }
+// };
+
 // module.exports = {
 //   signupAdmin,
 //   loginAdmin,
@@ -324,17 +396,21 @@
 //   editUser,
 //   toggleBanUser,
 //   deleteUser,
+//   getPendingWithdrawalRequests,
+//   updateWithdrawalRequest,
+//   getTotalRevenue,
 // };
 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const mongoose = require('mongoose'); 
+const mongoose = require('mongoose');
 const axios = require('axios');
 const Admin = require('../models/Admin');
 const User = require('../models/User');
-const WithdrawalRequest = require('../models/WithdrawalRequest'); // Add WithdrawalRequest model
+const WithdrawalRequest = require('../models/WithdrawalRequest');
+const Round = require('../models/Round'); // Add Round model import
 
 // Validate environment variables at startup
 if (!process.env.ADMIN_KEY) {
@@ -611,20 +687,17 @@ const toggleBanUser = async (req, res) => {
   }
 };
 
-// New endpoint: Get Total Revenue from NOWPayments
+// Get Total Revenue from NOWPayments
 const getTotalRevenue = async (req, res) => {
   try {
-    // Fetch balance from NOWPayments
     const response = await axios.get(`${process.env.NOWPAYMENTS_API_URL}/balance`, {
       headers: {
         'x-api-key': process.env.NOWPAYMENTS_API_KEY,
       },
     });
 
-    // Check if response contains balance data
     if (response.data && response.data.currencies) {
       let totalBalance = 0;
-      // Sum balances across all currencies (assuming they're in a common unit or USD for simplicity)
       for (const currency of response.data.currencies) {
         totalBalance += parseFloat(currency.balance || 0);
       }
@@ -662,7 +735,7 @@ const deleteUser = async (req, res) => {
 // Get Withdrawal Requests
 const getPendingWithdrawalRequests = async (req, res) => {
   try {
-    const { status } = req.query; // Allow filtering by status (e.g., pending, approved, rejected)
+    const { status } = req.query;
     const query = status ? { status } : {};
     const requests = await WithdrawalRequest.find(query).populate('userId', 'email');
     res.json(requests);
@@ -687,10 +760,8 @@ const updateWithdrawalRequest = async (req, res) => {
 
     if (action === 'approve') {
       withdrawalRequest.status = 'approved';
-      // Optionally, process the withdrawal via NOWPayments here
     } else if (action === 'reject') {
       withdrawalRequest.status = 'rejected';
-      // Refund the amount to the user's balance
       const user = await User.findById(withdrawalRequest.userId).session(session);
       if (user) {
         user.balance += withdrawalRequest.amount;
@@ -713,6 +784,22 @@ const updateWithdrawalRequest = async (req, res) => {
   }
 };
 
+// New Endpoint: Get Active Rounds Count
+const getActiveRounds = async (req, res) => {
+  try {
+    const currentTime = new Date();
+    const activeRoundsCount = await Round.countDocuments({
+      expiresAt: { $gt: currentTime },
+    });
+
+    console.log(`Admin ${req.admin.id} fetched active rounds: ${activeRoundsCount}`);
+    res.json({ activeRounds: activeRoundsCount });
+  } catch (err) {
+    console.error('Error fetching active rounds:', err);
+    res.status(500).json({ error: 'Failed to fetch active rounds', details: err.message });
+  }
+};
+
 module.exports = {
   signupAdmin,
   loginAdmin,
@@ -726,4 +813,5 @@ module.exports = {
   getPendingWithdrawalRequests,
   updateWithdrawalRequest,
   getTotalRevenue,
+  getActiveRounds, // Export the new endpoint
 };
