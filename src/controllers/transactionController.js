@@ -92,7 +92,6 @@ const initiateCryptoDeposit = async (req, res) => {
   }
 };
 
-// // Initiate Manual Crypto Withdrawal
 // const initiateCryptoWithdrawal = async (req, res) => {
 //   const { amount, cryptoCurrency, walletAddress, network, withdrawalPassword } = req.body;
 //   const userId = req.user.id; // From auth middleware
@@ -128,6 +127,7 @@ const initiateCryptoDeposit = async (req, res) => {
 //   session.startTransaction();
 
 //   try {
+//     // Fetch user within the session
 //     const user = await User.findById(userId).session(session);
 //     if (!user) {
 //       await session.abortTransaction();
@@ -154,6 +154,21 @@ const initiateCryptoDeposit = async (req, res) => {
 //       return res.status(400).json({ error: 'Insufficient balance' });
 //     }
 
+//     // Check for recent withdrawal requests (within last 24 hours)
+//     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+//     const recentWithdrawal = await WithdrawalRequest.findOne({
+//       userId,
+//       createdAt: { $gte: oneDayAgo },
+//       status: { $in: ['pending', 'approved'] }, // Only count pending or approved withdrawals
+//     }).session(session);
+
+//     if (recentWithdrawal) {
+//       await session.abortTransaction();
+//       return res.status(429).json({
+//         error: 'Withdrawal limit reached. You can only request one withdrawal per day.',
+//       });
+//     }
+
 //     // Create withdrawal request
 //     const withdrawalRequest = await WithdrawalRequest.create(
 //       [
@@ -166,29 +181,31 @@ const initiateCryptoDeposit = async (req, res) => {
 //           network: normalizedCrypto === 'USDT' ? network : null,
 //           withdrawalPassword,
 //           status: 'pending',
+//           createdAt: Date.now(), // Explicitly set for clarity
+//           updatedAt: Date.now(),
 //         },
 //       ],
 //       { session }
 //     );
 
-//     // Deduct amount from user balance (optional: you might want to deduct only after admin approval)
+//     // Deduct amount from user balance (consider moving this to admin approval if preferred)
 //     const updatedUser = await User.findByIdAndUpdate(
 //       userId,
 //       { $inc: { balance: -amount }, updatedAt: Date.now() },
 //       { new: true, select: 'balance', session }
 //     );
 
-//     // Here, you can add logic to notify admins (e.g., via WebSocket, email, or dashboard update)
+//     // Notify admins (e.g., via WebSocket, email, or dashboard update)
 //     console.log('Admin notification: New withdrawal request', {
 //       username: user.username,
 //       amount,
 //       cryptoCurrency: normalizedCrypto,
 //       walletAddress,
 //       network: normalizedCrypto === 'USDT' ? network : null,
+//       requestId: withdrawalRequest[0]._id,
 //     });
 
-//     // Example: You could emit a WebSocket event to the admin dashboard
-//     // Assuming you have a WebSocket server (e.g., using socket.io)
+//     // Example: WebSocket notification (uncomment if using socket.io)
 //     // const io = req.app.get('io');
 //     // io.to('admin_room').emit('newWithdrawalRequest', {
 //     //   username: user.username,
@@ -209,6 +226,7 @@ const initiateCryptoDeposit = async (req, res) => {
 //         walletAddress,
 //         network: normalizedCrypto === 'USDT' ? network : null,
 //         status: 'pending',
+//         requestId: withdrawalRequest[0]._id,
 //       },
 //     });
 //   } catch (err) {
@@ -239,6 +257,9 @@ const initiateCryptoWithdrawal = async (req, res) => {
   // Input validation
   if (!amount || amount <= 0) {
     return res.status(400).json({ error: 'Invalid withdrawal amount' });
+  }
+  if (amount < 10) {
+    return res.status(400).json({ error: 'Minimum withdrawal amount is 10 USD' });
   }
   const normalizedCrypto = cryptoCurrency?.toUpperCase();
   if (!normalizedCrypto || !['BTC', 'ETH', 'USDT'].includes(normalizedCrypto)) {
