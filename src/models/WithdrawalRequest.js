@@ -26,7 +26,7 @@ const withdrawalRequestSchema = new mongoose.Schema({
   },
   network: {
     type: String,
-    enum: ['BEP20', 'TRC20', 'TON', null],
+    enum: ['BEP20', 'ARBITRUM', 'TON', null],
   },
   withdrawalPassword: {
     type: String,
